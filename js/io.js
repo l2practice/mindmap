@@ -11,7 +11,7 @@ const loaded = {};
 function script(src) {
   return loaded[src] || (loaded[src] = new Promise((res, rej) => {
     const s = document.createElement('script'); s.src = src; s.onload = res;
-    s.onerror = () => { delete loaded[src]; rej(new Error('Không tải được thư viện: ' + src)); }; document.head.append(s);
+    s.onerror = () => { delete loaded[src]; rej(new Error('Could not load the library: ' + src)); }; document.head.append(s);
   }));
 }
 const needZip = async () => { if (!g.JSZip) await script(CDN.jszip); };
@@ -23,7 +23,7 @@ async function needPdf() {
   }
 }
 
-const mkNode = (text, children = []) => ({ id: uid(), text: String(text || '').trim() || '(trống)', children });
+const mkNode = (text, children = []) => ({ id: uid(), text: String(text || '').trim() || '(empty)', children });
 const mkDoc = (title, root, layout = 'map') => ({ v: 1, id: uid(), title, layout, theme: 'classic', lineStyle: 'curve', root });
 const baseName = f => f.replace(/\.[^.]+$/, '');
 const safeName = s => (s || 'mindmap').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'mindmap';
@@ -71,7 +71,7 @@ function xmXmlTopic(el) {
 }
 async function importXMind(file) {
   await needZip();
-  let zip; try { zip = await JSZip.loadAsync(file); } catch (e) { throw new Error('Không đọc được tệp .xmind (tệp hỏng hoặc không đúng định dạng).'); }
+  let zip; try { zip = await JSZip.loadAsync(file); } catch (e) { throw new Error('Could not read the .xmind file (corrupt or not the right format).'); }
   const docs = [];
   if (zip.file('content.json')) {
     const sheets = JSON.parse(await zip.file('content.json').async('string'));
@@ -84,8 +84,8 @@ async function importXMind(file) {
       const root = xmXmlTopic(top), tt = [...sh.children].find(c => c.localName === 'title');
       docs.push(mkDoc((tt && tt.textContent.trim()) || root.text || baseName(file.name) + (i ? ' ' + (i + 1) : ''), root));
     });
-  } else throw new Error('Tệp .xmind này không có nội dung đọc được (XMind quá cũ hoặc đã mã hoá bằng mật khẩu).');
-  if (!docs.length) throw new Error('Không tìm thấy sơ đồ nào trong tệp .xmind.');
+  } else throw new Error('This .xmind file has no readable content (very old XMind or password-protected).');
+  if (!docs.length) throw new Error('No map found in the .xmind file.');
   return docs;
 }
 async function exportXMind(doc) {
@@ -183,28 +183,28 @@ async function importPDF(file, progress) {
   await needPdf();
   const data = new Uint8Array(await file.arrayBuffer());
   let pdf; try { pdf = await pdfjsLib.getDocument({ data }).promise; }
-  catch (e) { throw new Error(e && e.name === 'PasswordException' ? 'PDF này có mật khẩu, hãy bỏ mật khẩu rồi nhập lại.' : 'Không đọc được tệp PDF.'); }
+  catch (e) { throw new Error(e && e.name === 'PasswordException' ? 'This PDF is password-protected. Remove the password and import again.' : 'Could not read the PDF file.'); }
   let title = baseName(file.name);
   try { const m = await pdf.getMetadata(); const t = m && m.info && m.info.Title; if (t && t.trim().length > 2 && !/^(untitled|microsoft word.*|document\d*)$/i.test(t.trim())) title = t.trim(); } catch (e) {}
   let outline = null; try { outline = await pdf.getOutline(); } catch (e) {}
   let root, how;
   if (outline && outline.length) { root = mkNode(title, await pdfOutlineToNodes(pdf, outline, { n: 0 })); how = 'outline'; }
   else { const r = await pdfHeuristic(pdf, title, progress); root = r.root; how = r.how; }
-  if (!root.children.length) throw new Error('PDF không có chữ để trích xuất (có thể là bản scan/ảnh). Hãy chạy OCR trước rồi nhập lại.');
-  const d = mkDoc(title, root, 'right'); d.importNote = how === 'outline' ? 'Dùng mục lục (bookmark) của PDF.' : how === 'heading' ? 'PDF không có mục lục, tự nhận diện tiêu đề theo cỡ chữ.' : 'PDF không có mục lục và không nhận ra tiêu đề, mỗi trang là một nhánh (nội dung nằm trong ghi chú).';
+  if (!root.children.length) throw new Error('The PDF has no extractable text (it may be a scan). Run OCR first, then import again.');
+  const d = mkDoc(title, root, 'right'); d.importNote = how === 'outline' ? 'Used the PDF outline (bookmarks).' : how === 'heading' ? 'The PDF has no outline; headings were detected by font size.' : 'The PDF has no outline and no headings were found; each page became a topic (text is in the note).';
   return [d];
 }
 
 /* ---------- text / markdown / json ---------- */
 async function importText(file) {
   const text = await file.text(), title = baseName(file.name), nodes = MM.parseOutline(text);
-  if (!nodes.length) throw new Error('Tệp trống.');
+  if (!nodes.length) throw new Error('The file is empty.');
   const root = nodes.length === 1 ? nodes[0] : mkNode(title, nodes);
   return [mkDoc(root.text || title, root, 'right')];
 }
 async function importJSON(file) {
-  let d; try { d = JSON.parse(await file.text()); } catch (e) { throw new Error('Tệp JSON không hợp lệ.'); }
-  if (!d || !d.root) throw new Error('Tệp JSON này không phải sơ đồ của ứng dụng.');
+  let d; try { d = JSON.parse(await file.text()); } catch (e) { throw new Error('Invalid JSON file.'); }
+  if (!d || !d.root) throw new Error('This JSON file is not a map from this app.');
   d.id = uid(); return [d];
 }
 async function importFile(file, progress) {
@@ -213,7 +213,7 @@ async function importFile(file, progress) {
   if (n.endsWith('.pdf')) return importPDF(file, progress);
   if (n.endsWith('.json')) return importJSON(file);
   if (/\.(md|markdown|txt)$/.test(n)) return importText(file);
-  throw new Error('Định dạng chưa hỗ trợ. Dùng .xmind, .pdf, .md, .txt hoặc .json.');
+  throw new Error('Unsupported format. Use .xmind, .pdf, .md, .txt or .json.');
 }
 function kindOf(name) { name = name.toLowerCase(); return name.endsWith('.xmind') ? 'xmind' : name.endsWith('.pdf') ? 'pdf' : 'other'; }
 

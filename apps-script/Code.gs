@@ -128,7 +128,7 @@ function unlink_(req, lock) {
 }
 
 function doGet() {
-  return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:18px system-ui;max-width:520px;margin:12vh auto;padding:0 20px"><h2>Mind Map</h2><p>Cổng phân quyền đang chạy. Hãy mở ứng dụng Mind Map để sử dụng.</p></body>');
+  return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:18px system-ui;max-width:520px;margin:12vh auto;padding:0 20px"><h2>Mind Map</h2><p>The access gateway is running. Open the Mind Map app to use it.</p></body>');
 }
 
 function doPost(e) {

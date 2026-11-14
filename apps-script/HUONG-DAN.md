@@ -55,3 +55,13 @@ window.MM_CONFIG = {
 * **Sau khi cập nhật `Code.gs`**: Deploy → Manage deployments → ✏️ → Version: **New version** → Deploy (URL `/exec` giữ nguyên).
 * **Phân quyền là "mềm"**: trang là mã tĩnh, nên người rành kỹ thuật có thể sửa mã trên máy mình để bỏ qua kiểm tra quyền (PDF/XMind/xuất tệp/giới hạn số sơ đồ). Họ chỉ ghi được vào Drive của chính họ, nên không ảnh hưởng ai khác. Việc cho phép đăng nhập/đăng ký và danh sách người dùng thì do máy chủ Apps Script quyết định.
 * Xung đột nhiều thiết bị: trước khi lưu, app so thời gian sửa trên Drive, nếu bản Drive mới hơn sẽ hỏi trước khi ghi đè.
+
+
+## Trợ lý AI (Gemini)
+* Mỗi người tự tạo **API key** tại <https://aistudio.google.com/apikey> và dán vào *Settings → AI (Gemini)* (hoặc ngay trong khung AI ở bên trái editor). Key chỉ nằm trong `localStorage` của trình duyệt đó và chỉ được gửi tới `generativelanguage.googleapis.com`. Apps Script và admin **không** nhận được key. Đổi máy thì nhập lại key.
+* Khi dùng AI, nội dung sơ đồ (chữ của các nhánh và ghi chú ngắn) được gửi tới Google theo điều khoản Gemini API của gói mà key đó thuộc về. Hãy nhắc người dùng điều này, và khuyên không lưu key trên máy dùng chung.
+* Danh sách model được tải từ Google khi lưu key, nên không phụ thuộc tên model cố định trong mã.
+
+## Giao diện & font
+* Font toàn ứng dụng là **Google Sans** (tải từ Google Fonts, gói tiếng Việt đầy đủ). Ảnh PNG/SVG xuất ra được nhúng font này.
+* Ảnh nền trang giới thiệu: `bg-earth.webp` (giữ nguyên bản gốc).

@@ -21,19 +21,18 @@ function safeUrl(u) {
 
 /* ---------- Themes & markers ---------- */
 const THEMES = {
-  flow:    { name: 'Hiện đại', look: 'soft', bg: '#fbfbff', text: '#1e1b3a', root: ['linear-gradient(135deg,#7c6cf5,#4f3fd8)', '#ffffff'], dark: false, branches: ['#3b82f6', '#f59e0b', '#22c55e', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444', '#84cc16'] },
-  classic: { name: 'Cổ điển', bg: '#f6f7fb', text: '#1f2937', root: ['#1f2937', '#ffffff'], dark: false, branches: ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626', '#0891b2', '#ca8a04', '#db2777'] },
-  fresh:   { name: 'Tươi mát', bg: '#f1fbf7', text: '#12372a', root: ['#0f766e', '#ffffff'], dark: false, branches: ['#14b8a6', '#22c55e', '#65a30d', '#06b6d4', '#0ea5e9', '#10b981', '#84cc16', '#0d9488'] },
-  warm:    { name: 'Ấm áp', bg: '#fff8f1', text: '#431407', root: ['#9a3412', '#ffffff'], dark: false, branches: ['#f97316', '#ef4444', '#eab308', '#f43f5e', '#d97706', '#dc2626', '#fb923c', '#be123c'] },
+  classic: { name: 'Classic', bg: '#f6f7fb', text: '#1f2937', root: ['#1f2937', '#ffffff'], dark: false, branches: ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626', '#0891b2', '#ca8a04', '#db2777'] },
+  fresh:   { name: 'Fresh', bg: '#f1fbf7', text: '#12372a', root: ['#0f766e', '#ffffff'], dark: false, branches: ['#14b8a6', '#22c55e', '#65a30d', '#06b6d4', '#0ea5e9', '#10b981', '#84cc16', '#0d9488'] },
+  warm:    { name: 'Warm', bg: '#fff8f1', text: '#431407', root: ['#9a3412', '#ffffff'], dark: false, branches: ['#f97316', '#ef4444', '#eab308', '#f43f5e', '#d97706', '#dc2626', '#fb923c', '#be123c'] },
   pastel:  { name: 'Pastel', bg: '#fdf6ff', text: '#3b0764', root: ['#6d28d9', '#ffffff'], dark: false, branches: ['#a78bfa', '#f9a8d4', '#7dd3fc', '#86efac', '#fcd34d', '#fda4af', '#93c5fd', '#c4b5fd'] },
-  dark:    { name: 'Tối', bg: '#111827', text: '#e5e7eb', root: ['#f9fafb', '#111827'], dark: true, branches: ['#60a5fa', '#34d399', '#fb923c', '#c084fc', '#f87171', '#22d3ee', '#facc15', '#f472b6'] },
-  mono:    { name: 'Đơn sắc', bg: '#ffffff', text: '#111111', root: ['#111111', '#ffffff'], dark: false, branches: ['#374151', '#4b5563', '#6b7280', '#52525b', '#3f3f46', '#57534e', '#44403c', '#334155'] }
+  dark:    { name: 'Dark', bg: '#111827', text: '#e5e7eb', root: ['#f9fafb', '#111827'], dark: true, branches: ['#60a5fa', '#34d399', '#fb923c', '#c084fc', '#f87171', '#22d3ee', '#facc15', '#f472b6'] },
+  mono:    { name: 'Mono', bg: '#ffffff', text: '#111111', root: ['#111111', '#ffffff'], dark: false, branches: ['#374151', '#4b5563', '#6b7280', '#52525b', '#3f3f46', '#57534e', '#44403c', '#334155'] }
 };
 
 const PRI = ['#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed'];
 const MK = {};
 const MARKER_GROUPS = [
-  { name: 'Ưu tiên', ids: [] }, { name: 'Tiến độ', ids: [] }, { name: 'Biểu tượng', ids: [] }
+  { name: 'Priority', ids: [] }, { name: 'Progress', ids: [] }, { name: 'Symbols', ids: [] }
 ];
 PRI.forEach((c, i) => { MK['p' + (i + 1)] = { t: String(i + 1), bg: c }; MARKER_GROUPS[0].ids.push('p' + (i + 1)); });
 [['t0', 0], ['t25', 25], ['t50', 50], ['t75', 75], ['t100', 100]].forEach(([id, pct]) => { MK[id] = { pct }; MARKER_GROUPS[1].ids.push(id); });
@@ -95,10 +94,6 @@ function resolveStyle(n, depth, bc, th) {
   if (depth === 0) { fill = th.root[0]; color = th.root[1]; size = 20; weight = 700; radius = 14; }
   else if (depth === 1) { fill = bc; color = contrast(bc); size = 16; weight = 600; }
   else { fill = rgba(bc, th.dark ? 0.22 : 0.13); color = th.text; border = bc; }
-  if (th.look === 'soft' && depth >= 1) {
-    if (depth === 1) { fill = rgba(bc, th.dark ? 0.2 : 0.14); color = th.text; border = bc; weight = 600; }
-    else if (shape === 'auto') shape = 'underline';
-  }
   if (isHex(s.fill)) { fill = s.fill; color = s.color ? s.color : contrast(s.fill); border = depth >= 2 ? s.fill : border; }
   if (isHex(s.color)) color = s.color;
   if (s.size) size = s.size;
@@ -169,6 +164,12 @@ function norm(n) {
   return o;
 }
 
+const darkCache = new Map();
+function darkOf(th) {
+  if (!darkCache.has(th)) darkCache.set(th, Object.assign({}, th, { bg: THEMES.dark.bg, text: THEMES.dark.text, root: THEMES.dark.root, dark: true }));
+  return darkCache.get(th);
+}
+
 /* ---------- Engine ---------- */
 class MindMap {
   constructor(host, o = {}) {
@@ -187,8 +188,8 @@ class MindMap {
     this.bind();
     this.load(MindMap.blank());
   }
-  static blank(title = 'Bản đồ mới') {
-    return { v: 1, id: uid(), title, layout: 'map', theme: 'flow', lineStyle: 'curve', root: { id: uid(), text: title, children: [] } };
+  static blank(title = 'New map') {
+    return { v: 1, id: uid(), title, layout: 'map', theme: 'classic', lineStyle: 'curve', root: { id: uid(), text: title, children: [] } };
   }
 
   /* ----- document ----- */
@@ -196,11 +197,12 @@ class MindMap {
     this.endEdit(false);
     const d = doc || MindMap.blank();
     this.doc = {
-      v: 1, id: d.id || uid(), title: d.title || 'Bản đồ mới',
+      v: 1, id: d.id || uid(), title: d.title || 'New map',
       layout: ['map', 'right', 'left', 'org'].includes(d.layout) ? d.layout : 'map',
-      theme: THEMES[d.theme] ? d.theme : 'flow',
+      theme: THEMES[d.theme] ? d.theme : 'classic',
       lineStyle: ['curve', 'elbow', 'straight'].includes(d.lineStyle) ? d.lineStyle : 'curve',
-      root: norm(d.root || { text: d.title || 'Chủ đề trung tâm' })
+      grid: d.grid !== false, bg: isHex(d.bg) ? d.bg : '', lineW: ['thin', 'thick'].includes(d.lineW) ? d.lineW : 'auto', mono: !!d.mono, notes: !!d.notes,
+      root: norm(d.root || { text: d.title || 'Central topic' })
     };
     this.sel.clear(); this.primary = null; this.hits.clear();
     this.hist = []; this.hp = -1;
@@ -221,9 +223,16 @@ class MindMap {
       o.children = n.children.map(clean); return o;
     };
     const d = this.doc;
-    return { v: 1, id: d.id, title: d.title, layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, root: clean(d.root) };
+    return { v: 1, id: d.id, title: d.title, layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, grid: d.grid, bg: d.bg, lineW: d.lineW, mono: d.mono, notes: d.notes, root: clean(d.root) };
   }
-  theme() { return THEMES[this.themeOverride || this.doc.theme] || THEMES.flow; }
+  theme() {
+    const base = THEMES[this.themeOverride || this.doc.theme] || THEMES.classic;
+    if (!this.appDark || base.dark || this.themeOverride) return base;      // in dark mode every light map theme gets a dark canvas
+    return darkOf(base);
+  }
+  bgColor() { return isHex(this.doc.bg) ? this.doc.bg : this.theme().bg; }
+  setDocOpt(k, v) { this.doc[k] = v; this.commit(); }
+  setAppDark(on) { on = !!on; if (on === !!this.appDark) return; this.appDark = on; if (this.doc) this.render(); }
   reindex() {
     this.index.clear();
     const walk = (n, p, d) => { this.index.set(n.id, { n, p, d }); n.children.forEach(c => walk(c, n, d + 1)); };
@@ -242,7 +251,7 @@ class MindMap {
   changed() { this.o.onChange && this.o.onChange(); }
   restore(s) {
     const d = JSON.parse(s); this.endEdit(false);
-    Object.assign(this.doc, { layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, root: norm(d.root) });
+    Object.assign(this.doc, { layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, grid: d.grid !== false, bg: d.bg || '', lineW: d.lineW || 'auto', mono: !!d.mono, notes: !!d.notes, root: norm(d.root) });
     this.reindex(); this.render(); this.changed();
   }
   undo() { if (this.hp > 0) { this.hp--; this.restore(this.hist[this.hp]); } }
@@ -252,13 +261,13 @@ class MindMap {
   /* ----- rendering ----- */
   render() {
     const th = this.theme();
-    this.vp.style.background = th.bg; this.vp.classList.toggle('dark', th.dark);
+    const bg = this.bgColor(); this.vp.style.background = bg; this.vp.classList.toggle('dark', this.doc.bg ? contrast(bg) === '#ffffff' : th.dark); this.vp.classList.toggle('nogrid', this.doc.grid === false);
     this.layer.innerHTML = ''; this.els.clear(); this.bc = new Map(); this.sty = new Map();
     const walk = (n, d, bc) => {
       this.bc.set(n.id, bc);
       const el = this.buildEl(n, d, bc, th); this.layer.append(el); this.els.set(n.id, el);
       if (!n.collapsed) n.children.forEach((c, i) => {
-        const cb = (c.style && c.style.line) || (d === 0 ? th.branches[i % th.branches.length] : bc);
+        const cb = (c.style && c.style.line) || (this.doc.mono ? (th.dark ? '#9aa3b8' : '#6b7280') : d === 0 ? th.branches[i % th.branches.length] : bc);
         walk(c, d + 1, cb);
       });
     };
@@ -277,6 +286,7 @@ class MindMap {
     if (n.note) { const i = $('span', 'ic', '📝'); i.title = n.note.slice(0, 300); row.append(i); }
     if (n.link) { const a = $('a', 'ic', '🔗'); a.href = n.link; a.target = '_blank'; a.rel = 'noopener'; a.title = n.link; row.append(a); }
     el.append(row);
+    if (this.doc.notes && n.note) { const nb = $('div', 'note-body'); nb.textContent = n.note.slice(0, 400); el.append(nb); }
     if (n.labels && n.labels.length) { const l = $('div', 'labels'); n.labels.forEach(x => l.append($('span', 'lb', esc(x)))); el.append(l); }
     if (n.children.length) {
       const f = $('button', 'fold' + (n.collapsed ? ' on' : '')); f.tabIndex = -1; f.dataset.fold = n.id;
@@ -354,7 +364,7 @@ class MindMap {
         else d = vert ? `M${x1} ${y1}C${x1} ${ym} ${x2} ${ym} ${x2} ${y2}` : `M${x1} ${y1}C${xm} ${y1} ${xm} ${y2} ${x2} ${y2}`;
         const dep = this.index.get(c.id).d, path = document.createElementNS(SVGNS, 'path');
         path.setAttribute('d', d); path.setAttribute('fill', 'none'); path.setAttribute('stroke', this.bc.get(c.id) || '#888');
-        path.setAttribute('stroke-width', dep === 1 ? 3.2 : dep === 2 ? 2.4 : 1.8); path.setAttribute('stroke-linecap', 'round'); path.dataset.c = c.id;
+        path.setAttribute('stroke-width', (dep === 1 ? 3.2 : dep === 2 ? 2.4 : 1.8) * ({ thin: 0.6, thick: 1.7 }[this.doc.lineW] || 1)); path.setAttribute('stroke-linecap', 'round'); path.dataset.c = c.id;
         this.svg.append(path);
       });
     });
@@ -655,29 +665,29 @@ class MindMap {
     const f = this.fmt = $('div', 'mm-fmt'); f.hidden = true; document.body.append(f);
     const keep = e => e.preventDefault();
     const btn = (html, title, fn, cls) => { const b = $('button', 'fb ' + (cls || ''), html); b.type = 'button'; b.title = title; b.onmousedown = keep; b.onclick = fn; f.append(b); return b; };
-    btn('<b>B</b>', 'In đậm (Ctrl+B)', () => this.exec('bold'));
-    btn('<i>I</i>', 'In nghiêng (Ctrl+I)', () => this.exec('italic'));
-    btn('<u>U</u>', 'Gạch chân (Ctrl+U)', () => this.exec('underline'));
-    btn('<s>S</s>', 'Gạch ngang', () => this.exec('strikeThrough'));
+    btn('<b>B</b>', 'Bold (Ctrl+B)', () => this.exec('bold'));
+    btn('<i>I</i>', 'Italic (Ctrl+I)', () => this.exec('italic'));
+    btn('<u>U</u>', 'Underline (Ctrl+U)', () => this.exec('underline'));
+    btn('<s>S</s>', 'Strikethrough', () => this.exec('strikeThrough'));
     f.append($('span', 'fsep'));
     const pal = ['#111827', '#6b7280', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#db2777', '#ffffff'];
     const hlp = ['#fef08a', '#fde68a', '#fdba74', '#fca5a5', '#f9a8d4', '#d8b4fe', '#a5b4fc', '#93c5fd', '#99f6e4', '#bbf7d0', '#d9f99d', '#e5e7eb'];
-    this.popBtn(f, '<span class="fa">A</span>', 'Màu chữ', pal, c => this.exec('foreColor', c), 'fore');
-    this.popBtn(f, '<span class="fh">ab</span>', 'Tô nền chữ (highlight)', hlp, c => c ? this.exec('hiliteColor', c) : this.exec('hiliteColor', 'transparent'), 'hil', true);
+    this.popBtn(f, '<span class="fa">A</span>', 'Text colour', pal, c => this.exec('foreColor', c), 'fore');
+    this.popBtn(f, '<span class="fh">ab</span>', 'Highlight', hlp, c => c ? this.exec('hiliteColor', c) : this.exec('hiliteColor', 'transparent'), 'hil', true);
     this.popSizes(f);
     f.append($('span', 'fsep'));
-    btn('x<sup>2</sup>', 'Chỉ số trên', () => this.exec('superscript'));
-    btn('x<sub>2</sub>', 'Chỉ số dưới', () => this.exec('subscript'));
-    btn('🔗', 'Chèn liên kết cho đoạn chữ', () => this.execLink());
-    btn('<span style="text-decoration:line-through wavy">T</span>', 'Xoá định dạng', () => this.exec('removeFormat'));
+    btn('x<sup>2</sup>', 'Superscript', () => this.exec('superscript'));
+    btn('x<sub>2</sub>', 'Subscript', () => this.exec('subscript'));
+    btn('🔗', 'Insert link', () => this.execLink());
+    btn('<span style="text-decoration:line-through wavy">T</span>', 'Clear formatting', () => this.exec('removeFormat'));
   }
   closePops() { this.fmt.querySelectorAll('.fpop').forEach(p => p.hidden = true); }
   popBtn(f, html, title, colors, fn, key, clearable) {
     const wrap = $('span', 'fwrap'), b = $('button', 'fb', html); b.type = 'button'; b.title = title; b.onmousedown = e => e.preventDefault();
     const pop = $('div', 'fpop'); pop.hidden = true;
     colors.forEach(c => { const s = $('button', 'sw'); s.type = 'button'; s.style.background = c; s.title = c; s.onmousedown = e => e.preventDefault(); s.onclick = () => { fn(c); pop.hidden = true; }; pop.append(s); });
-    if (clearable) { const s = $('button', 'sw none', '∅'); s.type = 'button'; s.title = 'Bỏ tô nền'; s.onmousedown = e => e.preventDefault(); s.onclick = () => { fn(null); pop.hidden = true; }; pop.append(s); }
-    const cu = $('input'); cu.type = 'color'; cu.title = 'Màu tuỳ chọn'; cu.className = 'swc';
+    if (clearable) { const s = $('button', 'sw none', '∅'); s.type = 'button'; s.title = 'Remove highlight'; s.onmousedown = e => e.preventDefault(); s.onclick = () => { fn(null); pop.hidden = true; }; pop.append(s); }
+    const cu = $('input'); cu.type = 'color'; cu.title = 'Custom colour'; cu.className = 'swc';
     let saved = null;
     cu.onmousedown = () => { const s = getSelection(); saved = s.rangeCount ? s.getRangeAt(0).cloneRange() : null; };
     cu.oninput = () => { const t = this.editing && this.editing.t; if (!t) return; t.focus(); if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); } fn(cu.value); };
@@ -686,7 +696,7 @@ class MindMap {
     wrap.append(b, pop); f.append(wrap);
   }
   popSizes(f) {
-    const wrap = $('span', 'fwrap'), b = $('button', 'fb', '<span style="font-size:11px">A</span><span style="font-size:15px">A</span>'); b.type = 'button'; b.title = 'Cỡ chữ'; b.onmousedown = e => e.preventDefault();
+    const wrap = $('span', 'fwrap'), b = $('button', 'fb', '<span style="font-size:11px">A</span><span style="font-size:15px">A</span>'); b.type = 'button'; b.title = 'Font size'; b.onmousedown = e => e.preventDefault();
     const pop = $('div', 'fpop sizes'); pop.hidden = true;
     [12, 14, 16, 18, 20, 24, 28, 32, 40, 56].forEach(sz => { const s = $('button', 'sz', String(sz)); s.type = 'button'; s.onmousedown = e => e.preventDefault(); s.onclick = () => { this.exec('fontSize', sz); pop.hidden = true; }; pop.append(s); });
     b.onclick = () => { const open = pop.hidden; this.closePops(); pop.hidden = !open; };
@@ -704,7 +714,7 @@ class MindMap {
   execLink() {
     const ed = this.editing; if (!ed) return; const t = ed.t, s = getSelection();
     const range = s.rangeCount ? s.getRangeAt(0).cloneRange() : null; this.noBlur = true;
-    const url = window.prompt('Địa chỉ liên kết (để trống để gỡ liên kết):', 'https://'); this.noBlur = false;
+    const url = window.prompt('Link address (leave empty to remove the link):', 'https://'); this.noBlur = false;
     t.focus(); if (range) { s.removeAllRanges(); s.addRange(range); }
     if (url === null) return;
     if (!url.trim()) document.execCommand('unlink'); else { const u = safeUrl(url); if (u) { if (s.isCollapsed) document.execCommand('insertHTML', false, `<a href="${esc(u)}">${esc(u)}</a>`); else document.execCommand('createLink', false, u); } }
@@ -718,7 +728,7 @@ class MindMap {
   }
 
   /* ----- structure operations ----- */
-  newNode(text = 'Nhánh con') { return { id: uid(), text, children: [] }; }
+  newNode(text = 'Subtopic') { return { id: uid(), text, children: [] }; }
   addChild(id = this.primary) {
     const info = this.index.get(id) || this.index.get(this.doc.root.id), p = info.n; p.collapsed = false;
     const n = this.newNode(); p.children.push(n); this.commit(); this.select(n.id); this.reveal(n.id); this.startEdit(n.id, true); return n;
@@ -732,9 +742,15 @@ class MindMap {
   }
   addParent(id = this.primary) {   // wrap selected node in a new parent
     const info = this.index.get(id); if (!info || !info.p) return;
-    const n = this.newNode('Nhánh trung gian'), i = info.p.children.indexOf(info.n);
+    const n = this.newNode('Intermediate topic'), i = info.p.children.indexOf(info.n);
     if (info.n.side) n.side = info.n.side; info.p.children.splice(i, 1, n); n.children.push(info.n);
     this.commit(); this.select(n.id); this.startEdit(n.id, true);
+  }
+  addTree(id, items) {   // add a plain {text, children} tree under a topic (used by the AI assistant); returns the number of topics added
+    const info = this.index.get(id) || this.index.get(this.doc.root.id), p = info.n; let count = 0;
+    const mk = a => { count++; return { id: uid(), text: String(a.text || '').slice(0, 200), children: (a.children || []).map(mk) }; };
+    const nodes = (items || []).map(mk); if (!nodes.length) return 0;
+    p.collapsed = false; p.children.push(...nodes); this.commit(); this.select(nodes[0].id); this.reveal(nodes[0].id); return count;
   }
   remove() {
     const nodes = this.selNodes().filter(n => this.index.get(n.id).p); if (!nodes.length) return;
@@ -843,6 +859,10 @@ class MindMap {
     return css;
   }
   exportSVG(pad = 40) {
+    const wasDark = this.appDark; if (wasDark) { this.appDark = false; this.render(); }
+    try { return this.exportSVGNow(pad); } finally { if (wasDark) { this.appDark = true; this.render(); } }
+  }
+  exportSVGNow(pad) {
     const b = this.bounds(), th = this.theme(), w = Math.ceil(b.w + pad * 2 + 40), h = Math.ceil(b.h + pad * 2);
     const clone = this.stage.cloneNode(true);
     clone.style.transform = `translate(${pad + 20 - b.x}px,${pad - b.y}px)`;
@@ -850,22 +870,40 @@ class MindMap {
     clone.querySelectorAll('.fold:not(.on)').forEach(e => e.remove());
     clone.querySelectorAll('[contenteditable]').forEach(e => e.removeAttribute('contenteditable'));
     const wrap = document.createElement('div');
-    wrap.style.cssText = `position:relative;width:${w}px;height:${h}px;background:${th.bg};overflow:hidden;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Be Vietnam Pro',Arial,sans-serif`;
+    wrap.style.cssText = `position:relative;width:${w}px;height:${h}px;background:${this.bgColor()};overflow:hidden;font-family:'Google Sans','Google Sans Flex',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif`;
     wrap.append(clone);
     const xml = new XMLSerializer().serializeToString(wrap);
-    return { w, h, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><style><![CDATA[${this.cssText()}]]></style><foreignObject x="0" y="0" width="${w}" height="${h}">${xml}</foreignObject></svg>` };
+    return { w, h, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><style><![CDATA[${MindMap.fontCss || ''}${this.cssText()}]]></style><foreignObject x="0" y="0" width="${w}" height="${h}">${xml}</foreignObject></svg>` };
   }
   async exportPNG(scale = 2) {
+    await MindMap.loadFontCss();
     const { svg, w, h } = this.exportSVG(); const s = Math.min(scale, 16000 / Math.max(w, h));
     const img = new Image(); img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     await img.decode();
     const c = document.createElement('canvas'); c.width = Math.round(w * s); c.height = Math.round(h * s);
-    const x = c.getContext('2d'); x.fillStyle = this.theme().bg; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
-    return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Không tạo được ảnh')), 'image/png'));
+    const x = c.getContext('2d'); x.fillStyle = this.bgColor(); x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+    return new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Could not create the image')), 'image/png'));
   }
   styleInfo(id) { return this.sty.get(id); }
 }
 
+const FONT_URL = 'https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&display=swap';
+MindMap.fontCss = null;
+MindMap.loadFontCss = async function () {
+  if (MindMap.fontCss !== null) return MindMap.fontCss;
+  let out = '';
+  try {
+    const css = await (await fetch(FONT_URL)).text(), parts = css.split(/\/\*\s*([\w-]+)\s*\*\//).slice(1);
+    for (let i = 0; i < parts.length; i += 2) {
+      if (!['latin', 'latin-ext', 'vietnamese'].includes(parts[i])) continue;
+      const u = (parts[i + 1].match(/url\(([^)]+)\)/) || [])[1]; if (!u) continue;
+      const buf = await (await fetch(u)).arrayBuffer();
+      const data = await new Promise(r => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(new Blob([buf], { type: 'font/woff2' })); });
+      out += parts[i + 1].replace(u, data);
+    }
+  } catch (e) { out = ''; }
+  return (MindMap.fontCss = out);
+};
 MindMap.THEMES = THEMES; MindMap.MARKER_GROUPS = MARKER_GROUPS; MindMap.markerEl = markerEl; MK && (MindMap.MK = MK);
 MindMap.parseOutline = parseOutline; MindMap.norm = norm; MindMap.uid = uid; MindMap.sanitize = sanitize; MindMap.safeUrl = safeUrl; MindMap.esc = esc;
 g.MindMap = MindMap;

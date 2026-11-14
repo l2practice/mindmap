@@ -8,7 +8,7 @@ const FOLDER = 'application/vnd.google-apps.folder';
 let codeClient = null, tok = null, exp = 0, pendingCode = null, user = null, refreshing = null;
 
 const loadScript = src => new Promise((res, rej) => {
-  const s = document.createElement('script'); s.src = src; s.async = true; s.onload = res; s.onerror = () => rej(new Error('Không tải được ' + src)); document.head.append(s);
+  const s = document.createElement('script'); s.src = src; s.async = true; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.append(s);
 });
 const store = k => { try { return JSON.parse(localStorage.getItem(k) || sessionStorage.getItem(k) || 'null'); } catch (e) { return null; } };
 const SESS = 'mm-sess';
@@ -34,8 +34,8 @@ const requestCode = () => new Promise((res, rej) => { pendingCode = { res, rej }
 
 async function raw(body) {
   let r; try { r = await fetch(C.SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }); }
-  catch (e) { throw err('Không kết nối được máy chủ phân quyền (Apps Script). Kiểm tra SCRIPT_URL và mạng.', 'net'); }
-  let j; try { j = await r.json(); } catch (e) { throw err('Máy chủ phân quyền trả về dữ liệu lạ. Hãy kiểm tra Apps Script đã triển khai "Anyone" chưa.', 'bad_response'); }
+  catch (e) { throw err('Could not reach the access server (Apps Script). Check SCRIPT_URL and your network.', 'net'); }
+  let j; try { j = await r.json(); } catch (e) { throw err('The access server returned unexpected data. Check that the Apps Script is deployed for "Anyone" .', 'bad_response'); }
   return j;
 }
 function setToken(j) { tok = j.access_token; exp = Date.now() + (j.expires_in || 3600) * 1000; }
@@ -45,10 +45,10 @@ async function signIn(remember) {
   const code = await requestCode();
   const j = await raw({ action: 'link', code });
   if (!j.ok) throw err(({
-    no_refresh: 'Google chưa cấp quyền kết nối lâu dài cho tài khoản này. Hãy vào https://myaccount.google.com/permissions , gỡ quyền của ứng dụng Mind Map rồi đăng nhập lại.',
-    no_secret: 'Apps Script chưa có GOOGLE_CLIENT_SECRET. Xem hướng dẫn triển khai.',
-    exchange: 'Google từ chối mã đăng nhập (' + (j.detail || '') + '). Kiểm tra Client ID / Client secret trong Apps Script.',
-    bad_token: 'Token Google không khớp Client ID đã khai báo trong Apps Script (GOOGLE_CLIENT_ID).'
+    no_refresh: 'Google has not granted long-lived access for this account. Go to https://myaccount.google.com/permissions , remove access for the Mind Map app, then sign in again.',
+    no_secret: 'The Apps Script has no GOOGLE_CLIENT_SECRET. See the deployment guide.',
+    exchange: 'Google rejected the sign-in code (' + (j.detail || '') + '). Check the Client ID / Client secret in the Apps Script.',
+    bad_token: 'The Google token does not match the Client ID configured in the Apps Script (GOOGLE_CLIENT_ID).'
   })[j.error] || j.detail || j.error, j.error);
   saveSession({ email: j.email, sk: j.sk }, !!remember); setToken(j);
   return userinfo();
@@ -62,11 +62,11 @@ async function resume() {
 async function refresh() {
   if (refreshing) return refreshing;
   refreshing = (async () => {
-    const s = session(); if (!s) throw err('Chưa đăng nhập', 'relink');
+    const s = session(); if (!s) throw err('Not signed in', 'relink');
     const j = await raw({ action: 'keep', email: s.email, sk: s.sk });
     if (!j.ok) {
       if (['bad_session', 'relink', 'blocked'].includes(j.error)) clearSession();
-      throw err(j.error === 'blocked' ? 'Tài khoản đã bị khoá.' : 'Kết nối Google đã hết hạn, hãy đăng nhập lại.', j.error === 'blocked' ? 'blocked' : 'relink');
+      throw err(j.error === 'blocked' ? 'This account has been blocked.' : 'The Google connection expired. Please sign in again.', j.error === 'blocked' ? 'blocked' : 'relink');
     }
     setToken(j);
   })();
@@ -74,7 +74,7 @@ async function refresh() {
 }
 async function userinfo() {
   const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + (await token()) } });
-  if (!r.ok) throw err('Không lấy được thông tin tài khoản Google');
+  if (!r.ok) throw err('Could not read the Google account info');
   user = await r.json(); return user;
 }
 const hasToken = () => !!tok && exp - Date.now() > 90000;
@@ -87,18 +87,18 @@ async function signOut(all) {
 /* ---- Apps Script gate (authenticated by the user's Google token) ---- */
 async function gas(action, extra) {
   const j = await raw(Object.assign({ action, token: await token() }, extra || {}));
-  if (!j.ok) throw err(j.detail || j.error || 'Lỗi', j.error);
+  if (!j.ok) throw err(j.detail || j.error || 'Error', j.error);
   return j;
 }
 
 /* ---- Drive ---- */
 async function dfetch(url, opt, retry = true) {
   const t = await token(); opt = opt || {}; opt.headers = Object.assign({}, opt.headers, { Authorization: 'Bearer ' + t });
-  let r; try { r = await fetch(url, opt); } catch (e) { throw err('Mất kết nối mạng', 'net'); }
+  let r; try { r = await fetch(url, opt); } catch (e) { throw err('Network connection lost', 'net'); }
   if (r.status === 401 && retry) { tok = null; return dfetch(url, opt, false); }
   if (!r.ok) {
     let m = ''; try { m = (await r.json()).error.message; } catch (e) {}
-    throw err(m || ('Drive lỗi ' + r.status), r.status);
+    throw err(m || ('Drive error ' + r.status), r.status);
   }
   return r;
 }
@@ -128,15 +128,15 @@ const drive = {
     s = String(s || '').trim(); let m = s.match(/\/folders\/([\w-]{10,})/) || s.match(/[?&]id=([\w-]{10,})/);
     if (m) return m[1]; return /^[\w-]{10,}$/.test(s) ? s : '';
   },
-  async folderInfo(id) { const f = await this.meta(id); if (f.mimeType !== FOLDER) throw err('Liên kết này không phải thư mục', 'notfolder'); return f; },
+  async folderInfo(id) { const f = await this.meta(id); if (f.mimeType !== FOLDER) throw err('This link is not a folder', 'notfolder'); return f; },
   async pick() {
-    if (!C.API_KEY || !C.APP_ID) throw new Error('Chưa cấu hình API_KEY và APP_ID cho Google Picker trong config.js');
+    if (!C.API_KEY || !C.APP_ID) throw new Error('API_KEY and APP_ID for Google Picker are not configured in config.js');
     if (!g.gapi) await loadScript('https://apis.google.com/js/api.js');
     await new Promise(r => gapi.load('picker', r)); const t = await token();
     return new Promise(res => {
       const view = new google.picker.DocsView(google.picker.ViewId.FOLDERS).setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(FOLDER);
       new google.picker.PickerBuilder().addView(view).setOAuthToken(t).setDeveloperKey(C.API_KEY).setAppId(C.APP_ID)
-        .setTitle('Chọn thư mục lưu sơ đồ').setCallback(d => { if (d.action === 'picked') res(d.docs[0]); else if (d.action === 'cancel') res(null); }).build().setVisible(true);
+        .setTitle('Choose a folder for your maps').setCallback(d => { if (d.action === 'picked') res(d.docs[0]); else if (d.action === 'cancel') res(null); }).build().setVisible(true);
     });
   }
 };
