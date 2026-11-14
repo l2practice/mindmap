@@ -65,3 +65,13 @@ window.MM_CONFIG = {
 ## Giao diện & font
 * Font toàn ứng dụng là **Google Sans** (tải từ Google Fonts, gói tiếng Việt đầy đủ). Ảnh PNG/SVG xuất ra được nhúng font này.
 * Ảnh nền trang giới thiệu: `bg-earth.webp` (giữ nguyên bản gốc).
+
+
+## Chế độ Testing và Publish (quan trọng)
+* Khi ứng dụng Google ở chế độ **Testing**: (1) chỉ những email trong **Audience → Test users** mới đăng nhập được, người khác thấy lỗi `Error 403: access_denied`; (2) **khoá làm mới chỉ sống 7 ngày**, nên "kết nối liên tục" bị gián đoạn mỗi tuần và người dùng phải đăng nhập lại.
+* Để kết nối liên tục thật sự và để bất kỳ ai được bạn duyệt đều đăng nhập được, hãy **Publish app** (Audience → Publish app → Confirm) để chuyển sang *In production*. Vì chỉ xin các quyền không nhạy cảm (`openid`, `email`, `profile`, `drive.file`) nên không cần Google xác minh.
+* Nếu nút Publish bị xám: kiểm tra **Branding** đã điền *App name*, *User support email*, *Developer contact*; tải lại trang (Cmd+Shift+R); xem **Verification Center** có mục nào đang chờ; thử bằng cửa sổ ẩn danh.
+
+## Nhiều sheet và Outliner
+* Một tệp sơ đồ có thể chứa nhiều **sheet** (thanh tab ở đáy editor: bấm để mở, bấm đúp để đổi tên, chuột phải để nhân đôi/xoá, dấu ＋ để thêm). Tệp XMind nhiều sheet được nhập thành một tệp nhiều sheet, và xuất `.xmind`/Markdown/JSON gồm tất cả sheet. Tệp cũ (một sơ đồ) tự mở như một tệp 1 sheet.
+* **Outliner** (nút ở góc phải thanh đáy): xem và sửa sơ đồ dưới dạng danh sách thụt lề. Enter: thêm chủ đề; Tab / Shift+Tab: thụt vào / ra; Backspace trên dòng trống: xoá; ↑ ↓: di chuyển.

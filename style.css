@@ -429,3 +429,28 @@ td input[type=number]{width:74px;padding:5px 8px}
 input[type=password]{background:var(--input);border:1px solid var(--line);border-radius:10px;padding:9px 12px;outline:none}
 input[type=password]:focus{border-color:var(--accent2);box-shadow:0 0 0 3px var(--accent-soft)}
 @media (max-width:900px){.insp-open{display:none}}
+
+/* ---------- sheets + outliner ---------- */
+.sheetbar{height:40px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px;background:var(--panel);border-top:1px solid var(--line);z-index:25}
+.sheetbar .sp{flex:1}
+.sheets{display:flex;gap:2px;overflow-x:auto;min-width:0;align-items:flex-end;height:100%;scrollbar-width:thin}
+.sheet{padding:0 16px;height:32px;border:0;border-radius:9px 9px 0 0;background:transparent;font-weight:600;color:var(--muted);white-space:nowrap;margin-top:8px}
+.sheet:hover{background:var(--hover)}.sheet.on{background:var(--accent-soft);color:var(--accent)}
+.sb-add,.sb-btn{height:30px;border:1px solid transparent;border-radius:8px;background:transparent;display:inline-flex;align-items:center;gap:6px;padding:0 9px;font-weight:600;color:var(--muted);flex:none}
+.sb-add:hover,.sb-btn:hover{background:var(--hover);color:var(--text)}.sb-btn.on{background:var(--accent-soft);color:var(--accent)}
+.sb-add .ico,.sb-btn .ico{width:17px;height:17px}
+.outl{width:360px;flex:none;display:flex;flex-direction:column;background:var(--panel);border-right:1px solid var(--line);z-index:22;min-height:0}
+.outl>header{display:flex;align-items:center;gap:6px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.outl>header b{display:flex;align-items:center;gap:8px}.outl>header .ico{width:18px;height:18px;color:var(--accent)}
+.ol-body{flex:1;overflow:auto;padding:8px 6px}
+.ol-row{display:flex;align-items:center;gap:2px;border-radius:8px;padding-right:6px}
+.ol-row.sel{background:var(--accent-soft)}
+.ol-caret{width:22px;height:22px;flex:none;border:0;background:none;color:var(--muted);padding:0;font-size:12px;border-radius:6px}
+.ol-caret:hover{background:var(--hover)}.ol-caret.none{cursor:default;color:var(--line)}
+.ol-text{flex:1;min-width:0;border:0!important;background:transparent!important;padding:6px 6px!important;font-size:14px;outline:none;box-shadow:none!important;border-radius:6px!important}
+.ol-text:focus{background:var(--input)!important;box-shadow:0 0 0 2px var(--accent-soft)!important}
+.ol-row.root .ol-text{font-weight:700;font-size:15px}
+.ol-help{padding:8px 12px;border-top:1px solid var(--line);color:var(--muted);font-size:11.5px;line-height:1.5}
+.editor.presenting .outl,.editor.presenting .sheetbar{display:none!important}
+@media (max-width:900px){.outl{position:absolute;left:60px;top:0;bottom:0;width:min(360px,calc(100vw - 60px));box-shadow:var(--shadow)}}
+@media (max-width:700px){.outl{left:56px;width:calc(100vw - 56px)}.sb-btn span{display:none}}

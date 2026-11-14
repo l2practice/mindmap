@@ -595,7 +595,7 @@ class MindMap {
       else h = false;
     } else if (!this.primary) h = false;
     else switch (k) {
-      case 'Enter': e.shiftKey ? this.addSibling(null, true) : this.addSibling(); break;
+      case 'Enter': e.shiftKey ? this.addSibling(this.primary, true) : this.addSibling(); break;
       case 'Tab': this.addChild(); break;
       case 'Delete': case 'Backspace': this.remove(); break;
       case 'F2': case ' ': this.startEdit(this.primary, true); break;
@@ -729,16 +729,25 @@ class MindMap {
 
   /* ----- structure operations ----- */
   newNode(text = 'Subtopic') { return { id: uid(), text, children: [] }; }
-  addChild(id = this.primary) {
+  addChild(id = this.primary, quiet = false) {
     const info = this.index.get(id) || this.index.get(this.doc.root.id), p = info.n; p.collapsed = false;
-    const n = this.newNode(); p.children.push(n); this.commit(); this.select(n.id); this.reveal(n.id); this.startEdit(n.id, true); return n;
+    const n = this.newNode(); p.children.push(n); this.commit(); if (!quiet) { this.select(n.id); this.reveal(n.id); this.startEdit(n.id, true); } return n;
   }
-  addSibling(id = this.primary, before = false) {
-    const info = this.index.get(id); if (!info) return this.addChild();
-    if (!info.p) return this.addChild(id);
+  addSibling(id = this.primary, before = false, quiet = false) {
+    const info = this.index.get(id); if (!info) return this.addChild(undefined, quiet);
+    if (!info.p) return this.addChild(id, quiet);
     const n = this.newNode(); if (info.n.side) n.side = info.n.side;
     const i = info.p.children.indexOf(info.n); info.p.children.splice(before ? i : i + 1, 0, n);
-    this.commit(); this.select(n.id); this.reveal(n.id); this.startEdit(n.id, true); return n;
+    this.commit(); if (!quiet) { this.select(n.id); this.reveal(n.id); this.startEdit(n.id, true); } return n;
+  }
+  setText(id, text) { const n = this.get(id); if (!n) return; n.text = String(text); delete n.html; this.commit(); }
+  indent(id) {   // make the topic a child of its previous sibling (outliner Tab)
+    const i = this.index.get(id); if (!i || !i.p) return false; const k = i.p.children.indexOf(i.n); if (k < 1) return false;
+    return this.moveMany([id], i.p.children[k - 1].id, 'child');
+  }
+  outdent(id) {   // move the topic after its parent (outliner Shift+Tab)
+    const i = this.index.get(id); if (!i || !i.p || !this.index.get(i.p.id).p) return false;
+    return this.moveMany([id], i.p.id, 'after');
   }
   addParent(id = this.primary) {   // wrap selected node in a new parent
     const info = this.index.get(id); if (!info || !info.p) return;

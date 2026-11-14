@@ -88,22 +88,23 @@ async function importXMind(file) {
   if (!docs.length) throw new Error('No map found in the .xmind file.');
   return docs;
 }
-async function exportXMind(doc) {
+async function exportXMind(book) {
+  const sheets = book.sheets || [book];
   await needZip();
-  const topic = (n, top) => {
+  const topic = (n, top, doc) => {
     const t = { id: n.id, class: 'topic', title: n.text };
-    if (top) t.structureClass = XM_LAYOUT_BACK[doc.layout] || XM_LAYOUT_BACK.map;
+    if (top) t.structureClass = XM_LAYOUT_BACK[(doc || {}).layout] || XM_LAYOUT_BACK.map;
     if (n.note) t.notes = { plain: { content: n.note } };
     if (n.link) t.href = n.link;
     if (n.labels && n.labels.length) t.labels = n.labels;
     if (n.markers && n.markers.length) t.markers = n.markers.map(m => XM_BACK[m]).filter(Boolean).map(markerId => ({ markerId }));
     if (n.style && (n.style.fill || n.style.color)) { const p = {}; if (n.style.fill) p['svg:fill'] = n.style.fill; if (n.style.color) p['fo:color'] = n.style.color; t.style = { id: uid(), properties: p }; }
     if (n.collapsed) t.branch = 'folded';
-    if (n.children.length) t.children = { attached: n.children.map(c => topic(c)) };
+    if (n.children.length) t.children = { attached: n.children.map(c => topic(c, false, doc)) };
     return t;
   };
   const zip = new JSZip();
-  zip.file('content.json', JSON.stringify([{ id: uid(), class: 'sheet', title: doc.title, rootTopic: topic(doc.root, true) }]));
+  zip.file('content.json', JSON.stringify(sheets.map(sh => ({ id: uid(), class: 'sheet', title: sh.title, rootTopic: topic(sh.root, true, sh) }))));
   zip.file('metadata.json', JSON.stringify({ creator: { name: 'Mind Map' } }));
   zip.file('manifest.json', JSON.stringify({ 'file-entries': { 'content.json': {}, 'metadata.json': {} } }));
   return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.xmind.workbook' });
@@ -204,7 +205,7 @@ async function importText(file) {
 }
 async function importJSON(file) {
   let d; try { d = JSON.parse(await file.text()); } catch (e) { throw new Error('Invalid JSON file.'); }
-  if (!d || !d.root) throw new Error('This JSON file is not a map from this app.');
+  if (!d || (!d.root && !d.sheets)) throw new Error('This JSON file is not a map from this app.');
   d.id = uid(); return [d];
 }
 async function importFile(file, progress) {
@@ -217,10 +218,14 @@ async function importFile(file, progress) {
 }
 function kindOf(name) { name = name.toLowerCase(); return name.endsWith('.xmind') ? 'xmind' : name.endsWith('.pdf') ? 'pdf' : 'other'; }
 
-function toMarkdown(doc) {
-  const out = ['# ' + doc.root.text.replace(/\n/g, ' '), ''];
-  const w = (n, d) => { out.push('  '.repeat(d) + '- ' + n.text.replace(/\n/g, ' ') + (n.link ? ' (' + n.link + ')' : '')); if (n.note) out.push('  '.repeat(d + 1) + '> ' + n.note.replace(/\n/g, ' ')); n.children.forEach(c => w(c, d + 1)); };
-  doc.root.children.forEach(c => w(c, 0)); return out.join('\n') + '\n';
+function toMarkdown(book) {
+  const out = [];
+  (book.sheets || [book]).forEach(doc => {
+    out.push('# ' + doc.root.text.replace(/\n/g, ' '), '');
+    const w = (n, d) => { out.push('  '.repeat(d) + '- ' + n.text.replace(/\n/g, ' ') + (n.link ? ' (' + n.link + ')' : '')); if (n.note) out.push('  '.repeat(d + 1) + '> ' + n.note.replace(/\n/g, ' ')); n.children.forEach(c => w(c, d + 1)); };
+    doc.root.children.forEach(c => w(c, 0)); out.push('');
+  });
+  return out.join('\n').trim() + '\n';
 }
 function download(blob, name) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.append(a); a.click();

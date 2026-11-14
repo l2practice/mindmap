@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261114c">
+<link rel="stylesheet" href="style.css?v=20261114d">
 </head>
 <body>
 
@@ -171,6 +171,12 @@
         <button data-r="more" title="More options"><i data-ic="more"></i>More</button>
       </div>
 
+      <aside class="outl" id="outl" hidden>
+        <header><b><i data-ic="list"></i> Outliner</b><span class="sp"></span><button class="ib" id="olClose" title="Close"><i data-ic="close"></i></button></header>
+        <div class="ol-body" id="olBody"></div>
+        <div class="ol-help">Enter: new topic · Tab / Shift+Tab: indent / outdent · Backspace on an empty row: delete · ↑ ↓: move</div>
+      </aside>
+
       <aside class="aip" id="aip" hidden>
         <header><b><i data-ic="sparkle"></i> AI assistant</b><span class="sp"></span>
           <button class="ib" id="aiNew" title="New chat"><i data-ic="plus"></i></button><button class="ib" id="aiClose" title="Close"><i data-ic="close"></i></button></header>
@@ -272,19 +278,25 @@
         </div>
       </aside>
     </div>
+    <div class="sheetbar" id="sheetbar">
+      <div class="sheets" id="sheets"></div>
+      <button class="sb-add" id="sheetAdd" title="Add a sheet"><i data-ic="plus"></i></button>
+      <span class="sp"></span>
+      <button class="sb-btn" id="btnOutl" title="Show the map as an outline you can edit"><i data-ic="list"></i>Outliner</button>
+    </div>
   </section>
 </div>
 
 <input type="file" id="fileIn" hidden accept=".xmind,.pdf,.md,.txt,.json,.markdown">
 <div id="toast"></div>
 
-<script src="config.js?v=20261114c"></script>
-<script src="js/mindmap.js?v=20261114c"></script>
-<script src="js/icons.js?v=20261114c"></script>
-<script src="js/ai.js?v=20261114c"></script>
-<script src="js/templates.js?v=20261114c"></script>
-<script src="js/io.js?v=20261114c"></script>
-<script src="js/cloud.js?v=20261114c"></script>
-<script src="js/app.js?v=20261114c"></script>
+<script src="config.js?v=20261114d"></script>
+<script src="js/mindmap.js?v=20261114d"></script>
+<script src="js/icons.js?v=20261114d"></script>
+<script src="js/ai.js?v=20261114d"></script>
+<script src="js/templates.js?v=20261114d"></script>
+<script src="js/io.js?v=20261114d"></script>
+<script src="js/cloud.js?v=20261114d"></script>
+<script src="js/app.js?v=20261114d"></script>
 </body>
 </html>

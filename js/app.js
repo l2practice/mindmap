@@ -148,7 +148,7 @@ function initShell() {
 function initEditor() {
   document.querySelectorAll('[data-theme-toggle]').forEach(b => b.onclick = () => { P.appTheme = isDark() ? 'light' : 'dark'; savePrefs(); applyAppTheme(); if (S.view === 'settings') renderSettings(); });
   S.mm = new MindMap($('#canvas'), {
-    onChange, onSelect: updateInspector, isBlocked: blocked, onLayout: drawMini,
+    onChange, onSelect: () => { updateInspector(); updateOutlinerSel(); }, isBlocked: blocked, onLayout: drawMini,
     onView: k => { $('#zPct').textContent = Math.round(k * 100) + '%'; drawMini(); },
     onContext: (id, x, y) => contextMenu(id, x, y)
   });
@@ -156,12 +156,13 @@ function initEditor() {
   $('#title').addEventListener('input', e => {
     const v = e.target.value, mm = S.mm, r = mm.doc.root;
     if (r.text === S.lastTitle && !r.html && mm.index.size === 1) { mm.setRootText(v); mm.render(); }
-    S.lastTitle = v; mm.setTitle(v);
+    S.lastTitle = v; S.book.title = v; mm.changed();
   });
   $('#eBack').onclick = () => go('maps');
   $('#zIn').onclick = () => S.mm.zoomBy(1.2); $('#zOut').onclick = () => S.mm.zoomBy(1 / 1.2); $('#zFit').onclick = () => S.mm.fit(); $('#zHelp').onclick = showShortcuts;
   $('#zoomPill').onclick = e => { const r = S.mm.vp.getBoundingClientRect(); menuAt(e.currentTarget, [50, 75, 100, 125, 150, 200].map(z => ({ label: z + '%', fn: () => S.mm.zoomAt(z / 100, r.left + r.width / 2, r.top + r.height / 2) })).concat([{ sep: 1 }, { label: 'Fit to screen', hint: 'Ctrl+0', fn: () => S.mm.fit() }])); };
   $('#btnUndo').onclick = () => S.mm.undo(); $('#btnRedo').onclick = () => S.mm.redo();
+  $('#sheetAdd').onclick = addSheet; $('#btnOutl').onclick = () => toggleOutliner($('#outl').hidden); $('#olClose').onclick = () => toggleOutliner(false);
   $('#btnPresent').onclick = present; $('#btnShare').onclick = openShare;
   $('#btnInsp').onclick = () => setInsp($('#insp').hidden); $('#inspClose').onclick = () => setInsp(false); $('#inspOpen').onclick = () => setInsp(true);
   $('#eMenu').onclick = e => menuAt(e.currentTarget, fileMenu());
@@ -199,15 +200,99 @@ function setInsp(open) {   // show/hide the right-hand format panel and remember
 function updateHistBtns() { $('#btnUndo').disabled = !S.mm.canUndo(); $('#btnRedo').disabled = !S.mm.canRedo(); }
 function setSave(text, cls, fn) { const el = $('#save'); el.textContent = text; el.className = 'save ' + (cls || ''); el.onclick = fn || null; el.style.cursor = fn ? 'pointer' : ''; }
 function applyZoomPref() { if (P.zoom !== 'fit' && S.mm) S.mm.resetView(+P.zoom / 100); }
-function showDoc(doc, fileId, modified) {
-  go('editor'); S.mm.load(doc); S.fileId = fileId || null; S.modified = modified || null;
-  $('#title').value = S.lastTitle = S.mm.doc.title; syncInspectorDoc(); updateHistBtns(); requestAnimationFrame(applyZoomPref);
+/* A file ("book") holds several sheets; the engine always edits the active one. Old single-map files are wrapped on load. */
+function toBook(d) {
+  if (d && Array.isArray(d.sheets) && d.sheets.length) return { id: d.id || MindMap.uid(), title: d.title || 'New map', active: Math.min(Math.max(+d.active || 0, 0), d.sheets.length - 1), sheets: d.sheets };
+  return { id: d.id || MindMap.uid(), title: d.title || 'New map', active: 0, sheets: [Object.assign({}, d, { title: 'Map 1' })] };
 }
+function commitSheet() { if (S.book && S.mm) S.book.sheets[S.book.active] = S.mm.serialize(); }
+function bookData() { commitSheet(); return { v: 2, id: S.book.id, title: S.book.title, active: S.book.active, sheets: S.book.sheets }; }
+function showDoc(d, fileId, modified) {
+  S.book = toBook(d); go('editor'); S.mm.load(S.book.sheets[S.book.active]); S.fileId = fileId || null; S.modified = modified || null;
+  $('#title').value = S.lastTitle = S.book.title; syncInspectorDoc(); updateHistBtns(); renderSheets(); renderOutliner(); requestAnimationFrame(applyZoomPref);
+}
+function renderSheets() {
+  const bar = $('#sheets'); if (!bar || !S.book) return; bar.innerHTML = '';
+  S.book.sheets.forEach((sh, i) => {
+    const b = document.createElement('button'); b.className = 'sheet' + (i === S.book.active ? ' on' : ''); b.textContent = i === S.book.active ? S.mm.doc.title : sh.title;
+    b.title = 'Click to open · double-click to rename · right-click for more';
+    b.onclick = () => switchSheet(i); b.ondblclick = () => renameSheet(i); b.oncontextmenu = e => { e.preventDefault(); sheetMenu(i, e.clientX, e.clientY); };
+    bar.append(b);
+  });
+  const on = bar.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+function afterSheetLoad() { syncInspectorDoc(); updateHistBtns(); renderSheets(); renderOutliner(); requestAnimationFrame(applyZoomPref); }
+function switchSheet(i) {
+  if (i === S.book.active || !S.book.sheets[i]) return; if (S.mm.editing) S.mm.endEdit(true);
+  commitSheet(); S.book.active = i; S.mm.clearFind(); S.mm.load(S.book.sheets[i]); afterSheetLoad();
+}
+function addSheet() {
+  commitSheet(); const d = MMTemplates.make('blank'); d.title = 'Map ' + (S.book.sheets.length + 1); d.theme = P.mapTheme; d.layout = P.layout;
+  S.book.sheets.push(d); S.book.active = S.book.sheets.length - 1; S.mm.load(d); afterSheetLoad(); S.mm.changed();
+  requestAnimationFrame(() => { S.mm.select(S.mm.doc.root.id); S.mm.startEdit(S.mm.doc.root.id, true); });
+}
+function renameSheet(i) {
+  const cur = i === S.book.active ? S.mm.doc.title : S.book.sheets[i].title, n = (prompt('Sheet name', cur) || '').trim(); if (!n) return;
+  if (i === S.book.active) S.mm.doc.title = n; else S.book.sheets[i].title = n; renderSheets(); S.mm.changed();
+}
+function duplicateSheet(i) {
+  commitSheet(); const c = JSON.parse(JSON.stringify(S.book.sheets[i])); c.id = MindMap.uid(); c.title += ' copy';
+  (function w(n) { n.id = MindMap.uid(); n.children.forEach(w); })(c.root);
+  S.book.sheets.splice(i + 1, 0, c); S.book.active = i + 1; S.mm.load(c); afterSheetLoad(); S.mm.changed();
+}
+function deleteSheet(i) {
+  if (S.book.sheets.length < 2) return toast('A map needs at least one sheet.', true);
+  if (!confirm('Delete sheet “' + (i === S.book.active ? S.mm.doc.title : S.book.sheets[i].title) + '”?')) return;
+  commitSheet(); S.book.sheets.splice(i, 1); S.book.active = Math.min(i === S.book.active ? i : (i < S.book.active ? S.book.active - 1 : S.book.active), S.book.sheets.length - 1);
+  S.mm.load(S.book.sheets[S.book.active]); afterSheetLoad(); S.mm.changed();
+}
+function sheetMenu(i, x, y) {
+  menu([{ label: 'Rename', fn: () => renameSheet(i) }, { label: 'Duplicate', fn: () => duplicateSheet(i) }, { sep: 1 }, { label: 'Delete', fn: () => deleteSheet(i), disabled: S.book.sheets.length < 2 }], x, y);
+}
+
+/* ---------- outliner: the map as an editable, indented list ---------- */
+let olBusy = false;   // true while the outliner itself is committing a text edit (so it is not rebuilt under the user's cursor)
+function toggleOutliner(open) {
+  $('#outl').hidden = !open; $('#btnOutl').classList.toggle('on', open); lsSet('mm-outl', open ? '1' : '0');
+  if (open) { if (!$('#aip').hidden) toggleAI(false); renderOutliner(); }
+}
+function updateOutlinerSel() {
+  if ($('#outl').hidden) return; const mm = S.mm;
+  $$('#olBody .ol-row').forEach(r => r.classList.toggle('sel', mm.sel.has(r.dataset.id)));
+}
+function renderOutliner(focusId, selectAll) {
+  const el = $('#olBody'); if (!el || $('#outl').hidden || !S.mm) return; const mm = S.mm, top = el.scrollTop; el.innerHTML = '';
+  const rows = [];
+  (function w(n, d) {
+    const row = document.createElement('div'); row.className = 'ol-row' + (d === 0 ? ' root' : '') + (mm.sel.has(n.id) ? ' sel' : ''); row.dataset.id = n.id; row.style.paddingLeft = (4 + d * 20) + 'px';
+    const caret = document.createElement('button'); caret.className = 'ol-caret' + (n.children.length ? '' : ' none'); caret.tabIndex = -1; caret.textContent = n.children.length ? (n.collapsed ? '▸' : '▾') : '•';
+    caret.onclick = () => { if (n.children.length) mm.toggleCollapse([n.id]); };
+    const inp = document.createElement('input'); inp.type = 'text'; inp.className = 'ol-text'; inp.spellcheck = false; inp.value = inp.dataset.orig = n.text.replace(/\s*\n\s*/g, ' ');
+    const commit = () => { if (inp.value === inp.dataset.orig) return; const v = inp.value.trim(); inp.dataset.orig = inp.value; if (v) { olBusy = true; try { mm.setText(n.id, v); } finally { olBusy = false; } } else inp.value = inp.dataset.orig = n.text; };
+    const go = k => { const ip = rows[rows.findIndex(r => r.id === n.id) + k]; if (ip) ip.inp.focus(); };
+    inp.onfocus = () => { if (!mm.sel.has(n.id) || mm.primary !== n.id) { mm.select(n.id); mm.reveal(n.id); } };
+    inp.onblur = commit;
+    inp.onkeydown = e => {
+      if (e.isComposing || e.keyCode === 229) return; e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); commit(); const nn = d === 0 ? mm.addChild(n.id, true) : mm.addSibling(n.id, false, true); renderOutliner(nn.id, true); }
+      else if (e.key === 'Tab') { e.preventDefault(); commit(); if (d > 0) { (e.shiftKey ? mm.outdent(n.id) : mm.indent(n.id)); } renderOutliner(n.id); }
+      else if (e.key === 'Backspace' && inp.value === '' && d > 0) { e.preventDefault(); const prev = rows[rows.findIndex(r => r.id === n.id) - 1]; mm.select(n.id); mm.remove(); renderOutliner(prev && prev.id); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); commit(); go(-1); } else if (e.key === 'ArrowDown') { e.preventDefault(); commit(); go(1); }
+      else if (e.key === 'Escape') { inp.value = inp.dataset.orig; inp.blur(); }
+    };
+    row.append(caret, inp); el.append(row); rows.push({ id: n.id, inp });
+    if (!n.collapsed) n.children.forEach(c => w(c, d + 1));
+  })(mm.doc.root, 0);
+  el.scrollTop = top;
+  if (focusId) { const r = rows.find(x => x.id === focusId); if (r) { r.inp.focus(); const L = r.inp.value.length; r.inp.setSelectionRange(selectAll ? 0 : L, L); r.inp.scrollIntoView({ block: 'nearest' }); } }
+}
+
 
 /* ---------- saving ---------- */
 function onChange() {
+  if (!$('#outl').hidden && !olBusy) renderOutliner();
   S.rev++; S.dirty = true; updateHistBtns();
-  clearTimeout(S.draftT); S.draftT = setTimeout(() => lsSet('mm-draft', JSON.stringify({ t: Date.now(), fileId: S.fileId, modified: S.modified, doc: S.mm.serialize() })), 600);
+  clearTimeout(S.draftT); S.draftT = setTimeout(() => lsSet('mm-draft', JSON.stringify({ t: Date.now(), fileId: S.fileId, modified: S.modified, doc: bookData() })), 600);
   if (!S.folder.id) setSave('Drive not linked: saving a local draft only', 'err');
   else if (!P.autosave) setSave('Unsaved (Ctrl+S to save)');
   else { setSave('Unsaved…'); schedule(); }
@@ -220,7 +305,7 @@ async function save(force) {
   if (S.saving) { S.again = true; return; }
   clearTimeout(S.timer); S.saving = true; const rev = S.rev; setSave('Saving…');
   try {
-    const doc = S.mm.serialize(), name = MMIO.safeName(doc.title) + '.mindmap.json', D = Cloud.drive;
+    const doc = bookData(), name = MMIO.safeName(doc.title) + '.mindmap.json', D = Cloud.drive;
     if (!S.fileId) {
       if (!isAdmin() && S.maps.length >= S.me.perms.maxMaps) throw Object.assign(new Error('You have reached the limit of ' + S.me.perms.maxMaps + ' maps set by the administrator.'), { code: 'quota' });
       const f = await D.create(S.folder.id, name, doc); S.fileId = f.id; S.modified = f.modifiedTime; S.maps.unshift({ id: f.id, name: f.name, modifiedTime: f.modifiedTime });
@@ -324,32 +409,28 @@ async function doImport(file) {
   try {
     const docs = await MMIO.importFile(file, (p, n) => { t.textContent = 'Analysing PDF: page ' + p + '/' + n + '…'; });
     t.remove(); await flush(); docs.forEach(d => { if (!d.theme || d.theme === 'classic') d.theme = P.mapTheme; });
-    if (!isAdmin() && S.folder.id) {   // respect the per-user map limit
-      const room = S.me.perms.maxMaps - S.maps.length;
-      if (room <= 0) return toast('You have reached the limit of ' + S.me.perms.maxMaps + ' maps set by the administrator; nothing more can be imported.', true);
-      if (docs.length > room) { toast('Importing only ' + room + '/' + docs.length + ' maps because of the administrator limit.', true, 6000); docs.length = room; }
-    }
-    showDoc(docs[0], null, null); S.rev++; S.dirty = true; if (S.folder.id) schedule(300);
-    for (let i = 1; i < docs.length && S.folder.id; i++) { const d = docs[i], f = await Cloud.drive.create(S.folder.id, MMIO.safeName(d.title) + '.mindmap.json', d); S.maps.unshift({ id: f.id, name: f.name, modifiedTime: f.modifiedTime }); }
-    toast('Imported "' + docs[0].title + '"' + (docs.length > 1 ? ' and ' + (docs.length - 1) + ' more map(s)' : '') + (docs[0].importNote ? '. ' + docs[0].importNote : ''), false, 5600);
+    if (!isAdmin() && S.folder.id && S.maps.length >= S.me.perms.maxMaps) return toast('You have reached the limit of ' + S.me.perms.maxMaps + ' maps set by the administrator; nothing more can be imported.', true);
+    const base = file.name.replace(/\.[^.]+$/, ''), d0 = docs.length > 1 ? { id: MindMap.uid(), title: base, active: 0, sheets: docs } : docs[0];
+    showDoc(d0, null, null); S.rev++; S.dirty = true; if (S.folder.id) schedule(300);
+    toast('Imported "' + (d0.title) + '"' + (docs.length > 1 ? ' with ' + docs.length + ' sheets' : '') + (docs[0].importNote ? '. ' + docs[0].importNote : ''), false, 5600);
   } catch (e) { t.remove(); toast(errMsg(e), true); }
 }
 async function exportAs(kind) {
   if (!can('export')) return toast('The administrator has not allowed file export for this account.', true);
-  const mm = S.mm, nm = MMIO.safeName(mm.doc.title);
+  const mm = S.mm, nm = MMIO.safeName(S.book.title);
   try {
     if (kind === 'png') MMIO.download(await mm.exportPNG(2), nm + '.png');
     else if (kind === 'svg') { await MindMap.loadFontCss(); MMIO.download(new Blob([mm.exportSVG().svg], { type: 'image/svg+xml' }), nm + '.svg'); }
-    else if (kind === 'xmind') MMIO.download(await MMIO.exportXMind(mm.serialize()), nm + '.xmind');
-    else if (kind === 'md') MMIO.download(new Blob([MMIO.toMarkdown(mm.serialize())], { type: 'text/markdown' }), nm + '.md');
-    else if (kind === 'json') MMIO.download(new Blob([JSON.stringify(mm.serialize(), null, 1)], { type: 'application/json' }), nm + '.mindmap.json');
+    else if (kind === 'xmind') MMIO.download(await MMIO.exportXMind(bookData()), nm + '.xmind');
+    else if (kind === 'md') MMIO.download(new Blob([MMIO.toMarkdown(bookData())], { type: 'text/markdown' }), nm + '.md');
+    else if (kind === 'json') MMIO.download(new Blob([JSON.stringify(bookData(), null, 1)], { type: 'application/json' }), nm + '.mindmap.json');
     else if (kind === 'pdf') await exportPDF();
   } catch (e) { toast('Export failed: ' + errMsg(e), true); }
 }
 async function exportPDF() {
   const mm = S.mm; await MindMap.loadFontCss(); const { w, h } = mm.exportSVG(), url = URL.createObjectURL(await mm.exportPNG(2));
   const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.append(f);
-  const d = f.contentDocument; d.open(); d.write(`<!doctype html><title>${esc(mm.doc.title)}</title><style>@page{size:${w >= h ? 'landscape' : 'portrait'};margin:8mm}html,body{margin:0}img{width:100%;height:auto;display:block}</style><img src="${url}">`); d.close();
+  const d = f.contentDocument; d.open(); d.write(`<!doctype html><title>${esc(S.book.title)}</title><style>@page{size:${w >= h ? 'landscape' : 'portrait'};margin:8mm}html,body{margin:0}img{width:100%;height:auto;display:block}</style><img src="${url}">`); d.close();
   const img = d.querySelector('img'); const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => { f.remove(); URL.revokeObjectURL(url); }, 60000); };
   if (img.complete) go(); else img.onload = go;
   toast('Choose “Save as PDF” in the print dialog', false, 4500);
@@ -368,9 +449,9 @@ async function openShare() {
     </div><div class="prev" id="shPrev"><span class="spin"></span></div></div>`, { wide: true });
   m.el.querySelector('#shCopy').onclick = () => { navigator.clipboard.writeText(link).then(() => toast('Drive link copied'), () => toast('Could not copy', true)); };
   m.el.querySelector('#shDrive').onclick = () => window.open(link, '_blank', 'noopener');
-  const outline = () => MMIO.toMarkdown(mm.serialize());
+  const outline = () => MMIO.toMarkdown(bookData());
   m.el.querySelector('#shMd').onclick = () => navigator.clipboard.writeText(outline()).then(() => toast('Outline copied (Markdown)'), () => toast('Could not copy', true));
-  m.el.querySelector('#shMail').onclick = () => { location.href = 'mailto:?subject=' + encodeURIComponent(mm.doc.title) + '&body=' + encodeURIComponent(outline().slice(0, 1800)); };
+  m.el.querySelector('#shMail').onclick = () => { location.href = 'mailto:?subject=' + encodeURIComponent(S.book.title) + '&body=' + encodeURIComponent(outline().slice(0, 1800)); };
   m.el.querySelectorAll('[data-x]').forEach(b => b.onclick = () => exportAs(b.dataset.x));
   try { const blob = await mm.exportPNG(1); const u = URL.createObjectURL(blob); const pv = m.el.querySelector('#shPrev'); if (pv) pv.innerHTML = `<img alt="Preview" src="${u}">`; } catch (e) { const pv = m.el.querySelector('#shPrev'); if (pv) pv.textContent = 'Could not create a preview'; }
 }
@@ -609,6 +690,7 @@ function topicsHtml(items, max = 18) {
   return w(items) + (count > max ? '<div class="more">+ ' + (count - max) + ' more…</div>' : '');
 }
 function toggleAI(open) {
+  if (open && !$('#outl').hidden) toggleOutliner(false);
   $('#aip').hidden = !open; $('#rail [data-r=ai]').classList.toggle('on', open); lsSet('mm-ai', open ? '1' : '0');
   if (open) { renderAI(); setTimeout(() => { const t = $('#aiText'); t && t.focus(); }, 30); }
 }
