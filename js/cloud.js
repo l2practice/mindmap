@@ -1,72 +1,104 @@
-/* Google sign-in (GIS), access gate (Apps Script) and Drive storage */
+/* Google sign-in (one-time authorization code), persistent connection via the gate, and Drive storage */
 (function (g) {
 'use strict';
 const C = g.MM_CONFIG || {};
 const SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.file';
 const D = 'https://www.googleapis.com/drive/v3/files', U = 'https://www.googleapis.com/upload/drive/v3/files';
 const FOLDER = 'application/vnd.google-apps.folder';
-let tc = null, tok = null, exp = 0, pending = null, user = null;
+let codeClient = null, tok = null, exp = 0, pendingCode = null, user = null, refreshing = null;
 
 const loadScript = src => new Promise((res, rej) => {
   const s = document.createElement('script'); s.src = src; s.async = true; s.onload = res; s.onerror = () => rej(new Error('Không tải được ' + src)); document.head.append(s);
 });
-const lsGet = k => { try { return localStorage.getItem(k); } catch (e) { return null; } };
-const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} };
+const store = k => { try { return JSON.parse(localStorage.getItem(k) || sessionStorage.getItem(k) || 'null'); } catch (e) { return null; } };
+const SESS = 'mm-sess';
+function saveSession(s, remember) {
+  try { localStorage.removeItem(SESS); sessionStorage.removeItem(SESS); (remember ? localStorage : sessionStorage).setItem(SESS, JSON.stringify(s)); } catch (e) {}
+}
+const clearSession = () => { try { localStorage.removeItem(SESS); sessionStorage.removeItem(SESS); } catch (e) {} };
+const session = () => store(SESS);
+const err = (msg, code) => Object.assign(new Error(msg), { code });
 
-function configured() { return !!(C.CLIENT_ID && C.SCRIPT_URL); }
+const configured = () => !!(C.CLIENT_ID && C.SCRIPT_URL);
 
 async function init() {
   await loadScript('https://accounts.google.com/gsi/client');
-  tc = google.accounts.oauth2.initTokenClient({
-    client_id: C.CLIENT_ID, scope: SCOPE, prompt: '',
-    callback: r => {
-      const p = pending; pending = null; if (!p) return;
-      if (r.error) return p.rej(Object.assign(new Error(r.error_description || r.error), { code: r.error }));
-      tok = r.access_token; exp = Date.now() + (r.expires_in || 3600) * 1000;
-      try { sessionStorage.setItem('mm-tok', JSON.stringify({ tok, exp })); } catch (e) {}
-      p.res(tok);
-    },
-    error_callback: e => { const p = pending; pending = null; p && p.rej(Object.assign(new Error(e.type || 'popup_error'), { code: e.type })); }
+  codeClient = google.accounts.oauth2.initCodeClient({
+    client_id: C.CLIENT_ID, scope: SCOPE, ux_mode: 'popup',
+    callback: r => { const p = pendingCode; pendingCode = null; if (!p) return; r.error ? p.rej(err(r.error_description || r.error, r.error)) : p.res(r.code); },
+    error_callback: e => { const p = pendingCode; pendingCode = null; p && p.rej(err(e.type || 'popup_error', e.type)); }
   });
-  try { const s = JSON.parse(sessionStorage.getItem('mm-tok') || 'null'); if (s && s.exp - Date.now() > 120000) { tok = s.tok; exp = s.exp; } } catch (e) {}
 }
-const request = prompt => new Promise((res, rej) => { pending = { res, rej }; tc.requestAccessToken({ prompt, hint: lsGet('mm-email') || undefined }); });
+// must be called from a click handler (browsers only allow the popup from a user gesture)
+const requestCode = () => new Promise((res, rej) => { pendingCode = { res, rej }; codeClient.requestCode(); });
 
-async function signIn() { await request(lsGet('mm-email') ? '' : 'select_account'); return userinfo(); }
-async function switchAccount() { await request('select_account'); return userinfo(); }
+async function raw(body) {
+  let r; try { r = await fetch(C.SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }); }
+  catch (e) { throw err('Không kết nối được máy chủ phân quyền (Apps Script). Kiểm tra SCRIPT_URL và mạng.', 'net'); }
+  let j; try { j = await r.json(); } catch (e) { throw err('Máy chủ phân quyền trả về dữ liệu lạ. Hãy kiểm tra Apps Script đã triển khai "Anyone" chưa.', 'bad_response'); }
+  return j;
+}
+function setToken(j) { tok = j.access_token; exp = Date.now() + (j.expires_in || 3600) * 1000; }
+
+/** Đăng nhập (gọi trong click). Trả về thông tin người dùng Google. */
+async function signIn(remember) {
+  const code = await requestCode();
+  const j = await raw({ action: 'link', code });
+  if (!j.ok) throw err(({
+    no_refresh: 'Google chưa cấp quyền kết nối lâu dài cho tài khoản này. Hãy vào https://myaccount.google.com/permissions , gỡ quyền của ứng dụng Mind Map rồi đăng nhập lại.',
+    no_secret: 'Apps Script chưa có GOOGLE_CLIENT_SECRET. Xem hướng dẫn triển khai.',
+    exchange: 'Google từ chối mã đăng nhập (' + (j.detail || '') + '). Kiểm tra Client ID / Client secret trong Apps Script.',
+    bad_token: 'Token Google không khớp Client ID đã khai báo trong Apps Script (GOOGLE_CLIENT_ID).'
+  })[j.error] || j.detail || j.error, j.error);
+  saveSession({ email: j.email, sk: j.sk }, !!remember); setToken(j);
+  return userinfo();
+}
+/** Mở lại ứng dụng: dùng khoá phiên đã lưu để lấy token mới, không cần popup. */
+async function resume() {
+  const s = session(); if (!s) return null;
+  try { await refresh(); } catch (e) { if (e.code === 'net') throw e; return null; }
+  return userinfo();
+}
+async function refresh() {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const s = session(); if (!s) throw err('Chưa đăng nhập', 'relink');
+    const j = await raw({ action: 'keep', email: s.email, sk: s.sk });
+    if (!j.ok) {
+      if (['bad_session', 'relink', 'blocked'].includes(j.error)) clearSession();
+      throw err(j.error === 'blocked' ? 'Tài khoản đã bị khoá.' : 'Kết nối Google đã hết hạn, hãy đăng nhập lại.', j.error === 'blocked' ? 'blocked' : 'relink');
+    }
+    setToken(j);
+  })();
+  try { await refreshing; } finally { refreshing = null; }
+}
 async function userinfo() {
-  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + tok } });
-  if (!r.ok) throw new Error('Không lấy được thông tin tài khoản Google');
-  user = await r.json(); lsSet('mm-email', user.email); return user;
+  const r = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: 'Bearer ' + (await token()) } });
+  if (!r.ok) throw err('Không lấy được thông tin tài khoản Google');
+  user = await r.json(); return user;
 }
-const hasToken = () => !!tok && exp - Date.now() > 60000;
-const tokenLeft = () => tok ? exp - Date.now() : 0;
-async function token() { if (hasToken()) return tok; return request(''); }
-function signOut() {
-  try { if (tok) google.accounts.oauth2.revoke(tok, () => {}); } catch (e) {}
-  tok = null; exp = 0; user = null; try { sessionStorage.removeItem('mm-tok'); } catch (e) {} try { localStorage.removeItem('mm-email'); } catch (e) {}
+const hasToken = () => !!tok && exp - Date.now() > 90000;
+async function token() { if (!hasToken()) await refresh(); return tok; }
+async function signOut(all) {
+  const s = session(); clearSession(); tok = null; exp = 0; user = null;
+  if (s) { try { await raw({ action: 'unlink', email: s.email, sk: s.sk, all: !!all }); } catch (e) {} }
 }
-/** gia hạn token ngầm; phải gọi từ một thao tác của người dùng (click/phím) để trình duyệt không chặn popup */
-async function renew() { await request(''); }
 
-/* ---- Apps Script gate ---- */
+/* ---- Apps Script gate (authenticated by the user's Google token) ---- */
 async function gas(action, extra) {
-  const t = await token();
-  let r; try { r = await fetch(C.SCRIPT_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ action, token: t }, extra || {})) }); }
-  catch (e) { throw new Error('Không kết nối được máy chủ phân quyền (Apps Script). Kiểm tra SCRIPT_URL và mạng.'); }
-  let j; try { j = await r.json(); } catch (e) { throw new Error('Máy chủ phân quyền trả về dữ liệu lạ. Hãy kiểm tra Apps Script đã triển khai "Anyone" chưa.'); }
-  if (!j.ok) throw Object.assign(new Error(j.detail || j.error || 'Lỗi'), { code: j.error });
+  const j = await raw(Object.assign({ action, token: await token() }, extra || {}));
+  if (!j.ok) throw err(j.detail || j.error || 'Lỗi', j.error);
   return j;
 }
 
 /* ---- Drive ---- */
 async function dfetch(url, opt, retry = true) {
   const t = await token(); opt = opt || {}; opt.headers = Object.assign({}, opt.headers, { Authorization: 'Bearer ' + t });
-  let r; try { r = await fetch(url, opt); } catch (e) { throw Object.assign(new Error('Mất kết nối mạng'), { code: 'net' }); }
+  let r; try { r = await fetch(url, opt); } catch (e) { throw err('Mất kết nối mạng', 'net'); }
   if (r.status === 401 && retry) { tok = null; return dfetch(url, opt, false); }
   if (!r.ok) {
     let m = ''; try { m = (await r.json()).error.message; } catch (e) {}
-    throw Object.assign(new Error(m || ('Drive lỗi ' + r.status)), { code: r.status });
+    throw err(m || ('Drive lỗi ' + r.status), r.status);
   }
   return r;
 }
@@ -96,7 +128,7 @@ const drive = {
     s = String(s || '').trim(); let m = s.match(/\/folders\/([\w-]{10,})/) || s.match(/[?&]id=([\w-]{10,})/);
     if (m) return m[1]; return /^[\w-]{10,}$/.test(s) ? s : '';
   },
-  async folderInfo(id) { const f = await this.meta(id); if (f.mimeType !== FOLDER) throw Object.assign(new Error('Liên kết này không phải thư mục'), { code: 'notfolder' }); return f; },
+  async folderInfo(id) { const f = await this.meta(id); if (f.mimeType !== FOLDER) throw err('Liên kết này không phải thư mục', 'notfolder'); return f; },
   async pick() {
     if (!C.API_KEY || !C.APP_ID) throw new Error('Chưa cấu hình API_KEY và APP_ID cho Google Picker trong config.js');
     if (!g.gapi) await loadScript('https://apis.google.com/js/api.js');
@@ -109,5 +141,5 @@ const drive = {
   }
 };
 
-g.Cloud = { configured, init, signIn, switchAccount, signOut, token, hasToken, tokenLeft, renew, gas, drive, get user() { return user; }, userinfo };
+g.Cloud = { configured, init, signIn, resume, signOut, token, hasToken, refresh, gas, drive, hasSession: () => !!session(), get user() { return user; }, userinfo };
 })(window);

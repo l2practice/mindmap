@@ -52,17 +52,35 @@ function modal(title, html, o = {}) {
 const blocked = () => !!document.querySelector('.modal-bg') || !$('#gate').hidden || PR.on || S.view !== 'editor';
 
 /* ---------- gate: login / register / waiting ---------- */
-function gate(html) { $('#gate').hidden = false; $('#app').hidden = true; $('#gate-body').innerHTML = html; }
-function gateLogin(msg) {
-  gate(`<button class="btn primary big" id="gLogin">Đăng nhập bằng Google</button>${msg ? `<div class="err">${esc(msg)}</div>` : ''}
-    <p class="note">Ứng dụng chỉ truy cập thư mục Drive mà bạn chọn (quyền <code>drive.file</code>). Quản trị viên không đọc được sơ đồ của bạn.</p>`);
-  $('#gLogin').onclick = async e => {
-    e.target.disabled = true; e.target.innerHTML = '<span class="spin"></span> Đang đăng nhập…';
-    try { await Cloud.signIn(); await afterLogin(); }
-    catch (err) { gateLogin(err.code === 'popup_closed' || err.code === 'access_denied' ? 'Bạn đã đóng cửa sổ đăng nhập.' : err.code === 'popup_failed_to_open' ? 'Trình duyệt chặn cửa sổ đăng nhập. Hãy cho phép popup rồi thử lại.' : errMsg(err)); }
-  };
+const GOOGLE_G = '<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>';
+function gateShow(which) {   // landing | login | state
+  $('#gate').hidden = false; $('#app').hidden = true;
+  $('#landing').hidden = which !== 'landing'; $('#loginCard').hidden = which !== 'login'; $('#stateCard').hidden = which !== 'state';
 }
-async function afterLogin() { const u = await Cloud.userinfo(); S.user = u; route((await Cloud.gas('me', { name: u.name })).me); }
+function gate(html) { gateShow('state'); $('#gate-body').innerHTML = html; }          // message card (register / waiting / error)
+function gateLogin(msg, card) {
+  gateShow(card || msg ? 'login' : 'landing');
+  if (card || msg) { $('#gErr').textContent = msg || ''; $('#gGoogle').disabled = false; $('#gGoogle').innerHTML = GOOGLE_G + '<span>Đăng nhập bằng Google</span><b>→</b>'; }
+}
+async function doLogin() {
+  const b = $('#gGoogle'); b.disabled = true; b.innerHTML = '<span class="spin"></span><span>Đang đăng nhập…</span>'; $('#gErr').textContent = '';
+  try { await Cloud.signIn($('#gRemember').checked); await afterLogin(); }
+  catch (err) {
+    gateLogin(err.code === 'popup_closed' || err.code === 'access_denied' ? 'Bạn đã đóng cửa sổ đăng nhập hoặc từ chối quyền.' : err.code === 'popup_failed_to_open' ? 'Trình duyệt chặn cửa sổ đăng nhập. Hãy cho phép popup rồi thử lại.' : errMsg(err), true);
+  }
+}
+function openDemo() {
+  const m = modal('Xem demo', '<div id="demoMap" style="height:min(70vh,560px);border-radius:12px;overflow:hidden;position:relative"></div><div class="help" style="margin-top:10px">Đây là sơ đồ mẫu (chỉ xem). Đăng nhập để tạo và chỉnh sửa sơ đồ của riêng bạn.</div>', { wide: true });
+  const doc = MMTemplates.make('skills'); doc.theme = 'flow'; doc.title = 'Demo';
+  const mm = new MindMap(m.el.querySelector('#demoMap'), { static: true }); mm.readOnly = true; mm.load(doc); requestAnimationFrame(() => mm.fit());
+}
+function initGate() {
+  $('#gStart').onclick = $('#gNavLogin').onclick = () => gateLogin('', true);
+  $('#gDemo').onclick = openDemo; $$('[data-demo]').forEach(b => b.onclick = openDemo);
+  $('#gGoogle').onclick = doLogin; $('#gReg').onclick = () => { $('#gErr').textContent = ''; doLogin(); };
+  $('#gBack').onclick = () => gateLogin();
+}
+async function afterLogin() { const u = Cloud.user || await Cloud.userinfo(); S.user = u; route((await Cloud.gas('me', { name: u.name })).me); }
 function route(me) {
   const who = `<p><b>${esc(S.user.name || '')}</b><br><span style="color:var(--muted)">${esc(S.user.email)}</span></p>`;
   const out = `<p><button class="btn small" id="gOut">Đăng xuất / đổi tài khoản</button></p>`;
@@ -75,7 +93,7 @@ function route(me) {
     gate(`${who}<div class="badge wait">Đang chờ duyệt</div><p class="sub" style="margin-top:12px">Yêu cầu của bạn đã được gửi. Khi quản trị viên duyệt, bấm "Kiểm tra lại".</p><p><button class="btn primary" id="gRe">Kiểm tra lại</button></p>${out}`);
     $('#gRe').onclick = async e => { e.target.disabled = true; try { route((await Cloud.gas('me', {})).me); } catch (err) { toast(errMsg(err), true); e.target.disabled = false; } };
   } else gate(`${who}<div class="badge bad">Đã bị khoá</div><p class="sub" style="margin-top:12px">Tài khoản này đã bị quản trị viên khoá. Liên hệ quản trị viên nếu đây là nhầm lẫn.</p>${out}`);
-  const b = $('#gOut'); if (b) b.onclick = () => { Cloud.signOut(); gateLogin(); };
+  const b = $('#gOut'); if (b) b.onclick = async () => { await Cloud.signOut(); gateLogin(); };
 }
 
 /* ---------- start ---------- */
@@ -87,7 +105,7 @@ function start(me) {
   $('#navAdmin').hidden = !isAdmin();
   if (!S.mm) { initShell(); initEditor(); initInspector(); initSearch(); initMini(); }
   updateUserCard();
-  if (innerWidth > 900) { $('#insp').hidden = false; $('#btnInsp').classList.add('on'); }
+  setInsp(innerWidth > 900 && lsGet('mm-insp') !== '0');
   go('home');
   loadLibrary().then(() => { restoreDraft(); if (!S.folder.id) setTimeout(() => { if (S.view === 'home') { toast('Hãy liên kết một thư mục Google Drive để lưu sơ đồ.'); go('cloud'); } }, 500); });
 }
@@ -116,10 +134,6 @@ function initShell() {
   $('#adRef').onclick = renderAdmin;
   $('#fileIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) doImport(f); };
   window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
-  document.addEventListener('pointerdown', () => {    // renew the Google token on the next click (popups need a user gesture)
-    if (!S.me || S.renewing || (S.mm && S.mm.editing) || Cloud.tokenLeft() > 5 * 60000) return;
-    S.renewing = true; Cloud.renew().then(() => { if (S.dirty) schedule(300); }).catch(() => {}).finally(() => { S.renewing = false; });
-  }, true);
   // drag & drop a file anywhere
   let dz = null; const undz = () => { if (dz) { dz.remove(); dz = null; } };
   document.addEventListener('dragover', e => { if ([...(e.dataTransfer.types || [])].includes('Files') && !$('#app').hidden) { e.preventDefault(); if (!dz) { dz = document.createElement('div'); dz.className = 'dropzone'; dz.style.position = 'fixed'; dz.style.zIndex = 400; dz.textContent = 'Thả tệp .xmind / .pdf / .md vào đây'; document.body.append(dz); } } });
@@ -144,7 +158,7 @@ function initEditor() {
   $('#zoomPill').onclick = e => { const r = S.mm.vp.getBoundingClientRect(); menuAt(e.currentTarget, [50, 75, 100, 125, 150, 200].map(z => ({ label: z + '%', fn: () => S.mm.zoomAt(z / 100, r.left + r.width / 2, r.top + r.height / 2) })).concat([{ sep: 1 }, { label: 'Vừa màn hình', hint: 'Ctrl+0', fn: () => S.mm.fit() }])); };
   $('#btnUndo').onclick = () => S.mm.undo(); $('#btnRedo').onclick = () => S.mm.redo();
   $('#btnPresent').onclick = present; $('#btnShare').onclick = openShare;
-  $('#btnInsp').onclick = () => { const h = !$('#insp').hidden; $('#insp').hidden = h; $('#btnInsp').classList.toggle('on', !h); };
+  $('#btnInsp').onclick = () => setInsp($('#insp').hidden); $('#inspClose').onclick = () => setInsp(false); $('#inspOpen').onclick = () => setInsp(true);
   $('#eMenu').onclick = e => menuAt(e.currentTarget, fileMenu());
   $('#eAvatar').onclick = e => menuAt(e.currentTarget, [{ hd: S.user ? S.user.email : '' }, { label: 'Về trang chủ', fn: () => go('home') }, { label: 'Cài đặt', fn: () => go('settings') }, { sep: 1 }, { label: 'Đăng xuất', fn: logout }]);
   $('#qbar').onclick = e => {
@@ -154,7 +168,7 @@ function initEditor() {
   $('#rail').onclick = e => {
     const b = e.target.closest('[data-r]'); if (!b) return; const mm = S.mm, r = b.dataset.r;
     const needSel = () => { if (!mm.primary) { toast('Hãy chọn một nhánh trước'); return false; } return true; };
-    const openInsp = () => { $('#insp').hidden = false; $('#btnInsp').classList.add('on'); $$('.tabs button')[0].click(); };
+    const openInsp = () => { setInsp(true); $$('.tabs button[data-tab]')[0].click(); };
     if (r === 'sibling') mm.primary ? mm.addSibling() : mm.addChild();
     else if (r === 'child') mm.addChild(mm.primary || mm.doc.root.id);
     else if (r === 'parent') { if (needSel()) mm.addParent(); }
@@ -172,6 +186,9 @@ function initEditor() {
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); save(true); } else if (mod && e.key.toLowerCase() === 'f') { e.preventDefault(); openSearch(); }
   });
+}
+function setInsp(open) {   // show/hide the right-hand format panel and remember the choice
+  $('#insp').hidden = !open; $('#inspOpen').hidden = open; $('#btnInsp').classList.toggle('on', open); lsSet('mm-insp', open ? '1' : '0');
 }
 function updateHistBtns() { $('#btnUndo').disabled = !S.mm.canUndo(); $('#btnRedo').disabled = !S.mm.canRedo(); }
 function setSave(text, cls, fn) { const el = $('#save'); el.textContent = text; el.className = 'save ' + (cls || ''); el.onclick = fn || null; el.style.cursor = fn ? 'pointer' : ''; }
@@ -214,7 +231,7 @@ async function save(force) {
     lsSet('mm-last', S.fileId);
   } catch (e) {
     if (e.code === 'quota') setSave('Chưa lưu: ' + e.message, 'err');
-    else if (/popup|access_denied|immediate_failed|interaction_required|login_required/i.test(e.code || e.message)) setSave('Phiên Google hết hạn, bấm vào đây để gia hạn', 'err', async () => { try { await Cloud.renew(); save(true); } catch (x) { toast('Chưa gia hạn được: ' + errMsg(x), true); } });
+    else if (e.code === 'relink' || e.code === 'blocked') setSave(e.code === 'blocked' ? 'Tài khoản đã bị khoá' : 'Kết nối Google đã hết hạn, bấm vào đây để đăng nhập lại', 'err', async () => { S.me = null; gateLogin('', true); })
     else if (e.code === 404 && S.fileId) { S.fileId = null; setSave('Tệp trên Drive không còn, sẽ tạo lại', 'err'); S.again = true; }
     else if (e.code === 403 || e.code === 404) setSave('Chưa lưu: không có quyền ghi vào thư mục Drive này. Hãy chọn lại thư mục.', 'err');
     else setSave('Chưa lưu: ' + errMsg(e) + ' (đã giữ nháp trên máy)', 'err');
@@ -428,7 +445,7 @@ document.addEventListener('DOMContentLoaded', () => {
 let inspReady = false;
 function initInspector() {
   if (inspReady) return; inspReady = true; const mm = () => S.mm;
-  $$('.tabs button').forEach(b => b.onclick = () => { $$('.tabs button').forEach(x => x.classList.toggle('on', x === b)); $('#tabNode').hidden = b.dataset.tab !== 'node'; $('#tabDoc').hidden = b.dataset.tab !== 'doc'; });
+  $$('.tabs button[data-tab]').forEach(b => b.onclick = () => { $$('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x === b)); $('#tabNode').hidden = b.dataset.tab !== 'node'; $('#tabDoc').hidden = b.dataset.tab !== 'doc'; });
   const fs = $('#fSize'); fs.innerHTML = '<option value="">Tự động</option>' + [10, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64].map(n => `<option value="${n}">${n}px</option>`).join('');
   fs.onchange = () => mm().setStyle({ size: fs.value ? +fs.value : null });
   $$('[data-st]').forEach(b => b.onclick = () => mm().toggleStyle(b.dataset.st));
@@ -468,10 +485,10 @@ function updateInspector() {
 
 /* ---------- cloud (Drive folder) page ---------- */
 function renderCloud() {
-  const hasPicker = !!(MM_CONFIG.API_KEY && MM_CONFIG.APP_ID), el = $('#cloudBody'), left = Cloud.tokenLeft();
+  const hasPicker = !!(MM_CONFIG.API_KEY && MM_CONFIG.APP_ID), el = $('#cloudBody');
   el.innerHTML = `
     <div class="fld"><label class="t">Tài khoản Google</label><div>${esc(S.user ? S.user.name : '')} <span style="color:var(--muted)">${esc(S.user ? S.user.email : '')}</span> <span class="badge ${isAdmin() ? 'ok' : ''}">${isAdmin() ? 'Quản trị viên' : 'Người dùng'}</span></div>
-      <div class="help">Phiên truy cập Drive còn khoảng ${left > 0 ? Math.max(1, Math.round(left / 60000)) + ' phút' : 'chưa có'} (tự gia hạn khi bạn bấm vào ứng dụng). <button class="link" id="clRenew">Gia hạn ngay</button></div></div>
+      <div class="help">Kết nối Drive được giữ liên tục và tự làm mới: bạn không cần đăng nhập lại mỗi giờ. <button class="link" id="clRenew">Kiểm tra kết nối</button></div></div>
     <div class="fld"><label class="t">Thư mục Google Drive lưu sơ đồ</label>
       <div id="clFolder" style="margin-bottom:10px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${hasPicker ? '<button class="btn primary" id="clPick">Chọn thư mục từ Drive…</button>' : ''}<button class="btn ${hasPicker ? '' : 'primary'}" id="clNew">Tạo thư mục mới</button></div>
@@ -485,17 +502,17 @@ function renderCloud() {
     try { const r = await Cloud.gas('saveSettings', { folderId: id, folderName: name }); S.me = Object.assign(S.me, r.me); S.folder = { id, name }; updateUserCard(); err(''); toast('Đã liên kết thư mục "' + name + '"'); await loadLibrary(); show(); if (S.dirty) schedule(300); }
     catch (e) { err(errMsg(e)); }
   };
-  $('#clRenew').onclick = async () => { try { await Cloud.renew(); toast('Đã gia hạn phiên'); renderCloud(); } catch (e) { toast('Chưa gia hạn được: ' + errMsg(e), true); } };
+  $('#clRenew').onclick = async () => { try { await Cloud.refresh(); toast('Kết nối Drive đang hoạt động'); } catch (e) { toast('Kết nối có vấn đề: ' + errMsg(e), true); } };
   const pk = $('#clPick'); if (pk) pk.onclick = async () => { err(''); try { const f = await Cloud.drive.pick(); if (f) link(f.id, f.name); } catch (e) { err(errMsg(e)); } };
-  $('#clNew').onclick = async () => { const name = prompt('Tên thư mục mới trong Drive của bạn:', 'Mind Map DNU'); if (!name) return; err(''); try { const f = await Cloud.drive.createFolder(name.trim()); link(f.id, f.name); } catch (e) { err(errMsg(e)); } };
+  $('#clNew').onclick = async () => { const name = prompt('Tên thư mục mới trong Drive của bạn:', 'Mind Map'); if (!name) return; err(''); try { const f = await Cloud.drive.createFolder(name.trim()); link(f.id, f.name); } catch (e) { err(errMsg(e)); } };
   $('#clGo').onclick = async () => {
     err(''); const id = Cloud.drive.folderIdFrom($('#clLink').value); if (!id) return err('Không nhận ra liên kết thư mục Drive.');
     try { const f = await Cloud.drive.folderInfo(id); link(f.id, f.name); } catch (e) { err(e.code === 404 || e.code === 403 ? 'Ứng dụng chưa có quyền với thư mục này. Hãy dùng “Chọn thư mục từ Drive” (cấp quyền) hoặc “Tạo thư mục mới”.' : errMsg(e)); }
   };
   $('#clSw').onclick = switchAccount; $('#clOut').onclick = logout;
 }
-async function switchAccount() { await flush(); Cloud.signOut(); S.me = null; gateLogin(); }
-async function logout() { await flush(); Cloud.signOut(); S.me = null; gateLogin(); }
+async function switchAccount() { await flush(); await Cloud.signOut(); S.me = null; gateLogin('', true); }
+async function logout() { await flush(); await Cloud.signOut(); S.me = null; gateLogin(); }
 
 /* ---------- settings page ---------- */
 let setTab = 'general';
@@ -523,7 +540,7 @@ function renderSettings() {
   } else {
     el.innerHTML = `
       <div class="setrow"><div class="lb"><b>Bản nháp trên máy này</b><small>${lsGet('mm-draft') ? 'Có bản nháp chưa lưu.' : 'Không có bản nháp.'} Bản nháp tự xoá sau khi lưu thành công lên Drive.</small></div><button class="btn small danger" id="aDraft">Xoá bản nháp</button></div>
-      <div class="setrow"><div class="lb"><b>Dữ liệu của bạn nằm ở đâu?</b><small>Sơ đồ là các tệp <code>*.mindmap.json</code> trong thư mục Drive bạn đã liên kết. Quản trị viên chỉ quản lý danh sách người dùng và quyền, không đọc được tệp của bạn.</small></div></div>
+      <div class="setrow"><div class="lb"><b>Dữ liệu của bạn nằm ở đâu?</b><small>Sơ đồ là các tệp <code>*.mindmap.json</code> trong thư mục Drive bạn đã liên kết. Để giữ kết nối liên tục (không phải đăng nhập lại mỗi giờ), một khoá làm mới được lưu ở máy chủ phân quyền (Apps Script) do quản trị viên quản lý. Khoá này chỉ có quyền <code>drive.file</code>: truy cập các tệp do ứng dụng tạo và thư mục bạn đã chọn, không phải toàn bộ Drive. Bạn thu hồi được bất cứ lúc nào bằng “Đăng xuất” hoặc tại myaccount.google.com/permissions.</small></div></div>
       <div class="setrow"><div class="lb"><b>Đăng xuất khỏi thiết bị này</b></div><button class="btn small" id="aOut">Đăng xuất</button></div>`;
     $('#aDraft').onclick = () => { lsDel('mm-draft'); toast('Đã xoá bản nháp'); renderSettings(); }; $('#aOut').onclick = logout;
   }
@@ -543,7 +560,7 @@ async function renderAdmin() {
       <td><input type="number" min="0" data-p="maxMaps" value="${u.perms.maxMaps}"></td>
       <td style="white-space:nowrap">${u.status !== 'active' ? '<button class="btn small primary" data-a="active">Duyệt</button> ' : '<button class="btn small" data-a="blocked">Khoá</button> '}<button class="btn small danger" data-a="remove">Xoá</button></td></tr>`).join('')}</tbody></table></div>`
     : '<div class="empty">Chưa có ai đăng ký. Người dùng đăng nhập bằng Google sẽ thấy nút “Gửi yêu cầu đăng ký”; yêu cầu hiện ở đây để bạn duyệt.</div>'}
-    <div class="help" style="margin-top:14px">Quyền được áp dụng khi người dùng mở lại ứng dụng. Chỉ bạn thấy danh sách này; không ai khác truy cập được dữ liệu sơ đồ của người dùng.</div>`;
+    <div class="help" style="margin-top:14px">Quyền được áp dụng khi người dùng mở lại ứng dụng. Chỉ bạn thấy danh sách này. Lưu ý: để giữ kết nối liên tục, Apps Script của bạn lưu khoá làm mới (chỉ quyền <code>drive.file</code>) của từng người dùng, nên về kỹ thuật bạn có thể truy cập các tệp do ứng dụng tạo trong Drive của họ. Hãy thông báo điều này cho người dùng. Xoá người dùng sẽ thu hồi khoá của họ.</div>`;
   const busy = async fn => { try { await fn(); } catch (e) { toast(errMsg(e), true); } renderAdmin(); };
   $('#adAdd').onclick = () => { const v = $('#adEm').value.trim(); if (v) busy(() => Cloud.gas('admin.add', { email: v })); };
   el.querySelectorAll('tr[data-e]').forEach(tr => {
@@ -555,10 +572,13 @@ async function renderAdmin() {
 
 /* ---------- boot ---------- */
 async function boot() {
+  initGate();
   if (!Cloud.configured()) { gate(`<div class="badge wait">Chưa cấu hình</div><p class="sub" style="margin-top:12px">Hãy điền <code>CLIENT_ID</code> và <code>SCRIPT_URL</code> trong <code>config.js</code> (xem <code>apps-script/HUONG-DAN.md</code>).</p>`); return; }
-  gate('<span class="spin"></span> Đang tải…');
-  try { await Cloud.init(); } catch (e) { gateLogin('Không tải được dịch vụ đăng nhập của Google: ' + errMsg(e)); return; }
-  if (Cloud.hasToken()) { try { await afterLogin(); return; } catch (e) { gateLogin(errMsg(e)); return; } }
+  try { await Cloud.init(); } catch (e) { gateLogin('Không tải được dịch vụ đăng nhập của Google: ' + errMsg(e), true); return; }
+  if (Cloud.hasSession()) {          // returning user: reconnect silently with the stored device key
+    gate('<p class="sub"><span class="spin"></span> Đang kết nối…</p>');
+    try { const u = await Cloud.resume(); if (u) { await afterLogin(); return; } } catch (e) { gateLogin(errMsg(e), true); return; }
+  }
   gateLogin();
 }
 g.MMApp = { S, P, start, boot, save, go, newMap, showDoc, toast, route, present, openShare };

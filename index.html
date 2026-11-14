@@ -3,39 +3,74 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Mind Map DNU</title>
+<title>Mind Map</title>
 <link rel="icon" href="icon.svg">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-<!-- Đăng nhập / đăng ký / chờ duyệt -->
+<!-- Trang giới thiệu + đăng nhập / đăng ký / chờ duyệt -->
 <div id="gate" class="gate">
-  <div class="gate-card">
-    <img src="icon.svg" alt="">
-    <h1>Mind Map DNU</h1>
-    <p class="sub">Sơ đồ tư duy cho dạy và học. Dữ liệu lưu trong Google Drive của chính bạn.</p>
+  <header class="g-nav">
+    <div class="g-logo"><img src="logo.svg" alt=""><span>Mind <b>Map</b></span></div>
+    <nav class="g-links"><button data-demo>Tạo</button><button data-demo>Sắp xếp</button><button data-demo>Hình dung</button><button data-demo>Chia sẻ</button></nav>
+    <button class="g-login" id="gNavLogin">Đăng nhập</button>
+  </header>
+
+  <main class="g-hero" id="landing">
+    <div class="g-eyebrow"><i></i><span>Ý tưởng · Kiến thức · Dự án · Tất cả trong một sơ đồ</span><i></i></div>
+    <h1>Biến ý tưởng của bạn<br>thành những <em>sơ đồ tư duy</em> rõ ràng</h1>
+    <p>Tạo, sắp xếp và phát triển ý tưởng bằng hình ảnh, cho học tập, giảng dạy, nghiên cứu và lập kế hoạch hằng ngày.</p>
+    <div class="g-cta">
+      <button class="g-go" id="gStart">Bắt đầu <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      <button class="g-demo" id="gDemo"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M10 8.5l6 3.5-6 3.5z" fill="currentColor"/></svg>Xem demo</button>
+    </div>
+    <div class="g-feat">
+      <div><svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2.4"/><circle cx="5" cy="18" r="2.4"/><circle cx="19" cy="18" r="2.4"/><path d="M11 7.2L6 16M13 7.2L18 16"/></svg><span>Xây dựng sơ đồ</span></div>
+      <div><svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></svg><span>Tổ chức kiến thức</span></div>
+      <div><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><path d="M16 5.5a3 3 0 010 5.8M18 14.5c1.8.8 3 2.7 3 5.5"/></svg><span>Chia sẻ &amp; xuất tệp</span></div>
+      <div><svg viewBox="0 0 24 24"><path d="M7 18a4.5 4.5 0 01-.6-8.96A6 6 0 0118 8.6 4.7 4.7 0 0117 18z"/><path d="M12 16v-5M9.8 12.8L12 10.6l2.2 2.2"/></svg><span>Đồng bộ Google Drive</span></div>
+    </div>
+  </main>
+
+  <section class="g-card" id="loginCard" hidden>
+    <img class="lc-logo" src="logo.svg" alt="">
+    <div class="lc-title">Mind <b>Map</b></div>
+    <p class="lc-sub">Tạo, tổ chức và phát triển ý tưởng bằng sơ đồ tư duy</p>
+    <button class="lc-google" id="gGoogle" type="button"></button>
+    <div class="lc-row">
+      <label class="lc-rem"><input type="checkbox" id="gRemember" checked><i></i><span>Ghi nhớ đăng nhập</span></label>
+    </div>
+    <div class="lc-err" id="gErr" role="alert"></div>
+    <div class="lc-or"><span>Đăng nhập bằng Google. Ứng dụng chỉ truy cập tệp do chính nó tạo trong Drive của bạn, và giữ kết nối để bạn không phải đăng nhập lại</span></div>
+    <p class="lc-reg">Chưa có tài khoản? <button class="link" id="gReg" type="button">Đăng ký ngay</button></p>
+    <button class="lc-back" id="gBack" type="button">← Về trang giới thiệu</button>
+  </section>
+
+  <section class="g-card" id="stateCard" hidden>
+    <img class="lc-logo" src="logo.svg" alt="">
+    <div class="lc-title">Mind <b>Map</b></div>
     <div id="gate-body"></div>
-  </div>
+  </section>
 </div>
 
 <div id="app" hidden data-view="home">
 
   <!-- ============ Thanh bên + các trang ============ -->
   <aside class="side" id="side">
-    <div class="brand"><img src="icon.svg" alt=""><span>Mind Map DNU</span></div>
+    <div class="brand"><img src="icon.svg" alt=""><span>Mind Map</span></div>
     <nav id="nav">
-      <button data-go="home"><i>🏠</i>Trang chủ</button>
-      <button data-go="maps"><i>🗂️</i>Sơ đồ của tôi</button>
-      <button data-go="templates"><i>🧩</i>Mẫu</button>
-      <button data-go="cloud"><i>☁️</i>Google Drive</button>
-      <button data-go="settings"><i>⚙️</i>Cài đặt</button>
-      <button data-go="admin" id="navAdmin" hidden><i>👥</i>Quản trị</button>
+      <button data-go="home"><i data-ic="home"></i>Trang chủ</button>
+      <button data-go="maps"><i data-ic="library"></i>Sơ đồ của tôi</button>
+      <button data-go="templates"><i data-ic="modes"></i>Mẫu</button>
+      <button data-go="cloud"><i data-ic="cloud"></i>Google Drive</button>
+      <button data-go="settings"><i data-ic="settings"></i>Cài đặt</button>
+      <button data-go="admin" id="navAdmin" hidden><i data-ic="users"></i>Quản trị</button>
     </nav>
     <div class="usercard">
       <div class="uc-row"><img class="avatar" id="ucAvatar" alt=""><div class="uc-t"><b id="ucName"></b><small id="ucMail"></small></div></div>
       <div class="uc-drive" id="ucDrive"></div>
-      <button class="btn small" id="ucOut">Đăng xuất</button>
+      <button class="btn small" id="ucOut"><i data-ic="logout"></i>Đăng xuất</button>
     </div>
   </aside>
   <div class="scrim" id="scrim"></div>
@@ -106,29 +141,29 @@
   <!-- ============ Trình soạn thảo ============ -->
   <section class="editor" id="v-editor" hidden>
     <header class="etop">
-      <button class="ib" id="eBack" title="Về danh sách sơ đồ">←</button>
+      <button class="ib" id="eBack" title="Về danh sách sơ đồ"><i data-ic="arrow-left"></i></button>
       <input class="title" id="title" placeholder="Tên sơ đồ" aria-label="Tên sơ đồ">
-      <button class="ib" id="eMenu" title="Tệp">▾</button>
+      <button class="ib" id="eMenu" title="Tệp"><i data-ic="chevron-down"></i></button>
       <span class="save" id="save"></span>
       <span class="sp"></span>
-      <button class="ib" id="btnUndo" title="Hoàn tác (Ctrl+Z)">↶</button>
-      <button class="ib" id="btnRedo" title="Làm lại (Ctrl+Shift+Z)">↷</button>
-      <button class="pill" id="zoomPill" title="Thu phóng"><span id="zPct">100%</span> ▾</button>
-      <button class="ib" id="btnPresent" title="Trình chiếu">▷</button>
+      <button class="ib" id="btnUndo" title="Hoàn tác (Ctrl+Z)"><i data-ic="undo"></i></button>
+      <button class="ib" id="btnRedo" title="Làm lại (Ctrl+Shift+Z)"><i data-ic="redo"></i></button>
+      <button class="pill" id="zoomPill" title="Thu phóng"><span id="zPct">100%</span><i data-ic="chevron-down"></i></button>
+      <button class="ib" id="btnPresent" title="Trình chiếu"><i data-ic="play"></i></button>
       <span class="sp"></span>
-      <button class="ib" id="btnSearch" title="Tìm kiếm (Ctrl+F)">🔍</button>
-      <button class="ib" id="btnInsp" title="Bảng định dạng">🎨</button>
-      <button class="btn primary" id="btnShare">Chia sẻ / Xuất</button>
+      <button class="ib" id="btnSearch" title="Tìm kiếm (Ctrl+F)"><i data-ic="search"></i></button>
+      <button class="ib" id="btnInsp" title="Ẩn/hiện bảng định dạng"><i data-ic="panel-right"></i></button>
+      <button class="btn primary" id="btnShare"><i data-ic="share"></i>Chia sẻ / Xuất</button>
       <img class="avatar" id="eAvatar" alt="">
     </header>
     <div class="ebody">
       <div class="rail" id="rail">
-        <button data-r="sibling" title="Thêm chủ đề cùng cấp (Enter)"><i>▭</i>Chủ đề</button>
-        <button data-r="child" title="Thêm nhánh con (Tab)"><i>⊞</i>Nhánh con</button>
-        <button data-r="parent" title="Chèn nhánh cha (Ctrl+Enter)"><i>⇤</i>Nhánh cha</button>
-        <button data-r="note" title="Ghi chú cho nhánh"><i>🗒</i>Ghi chú</button>
-        <button data-r="marker" title="Biểu tượng, tiến độ, ưu tiên"><i>★</i>Biểu tượng</button>
-        <button data-r="more" title="Thêm tuỳ chọn"><i>⋯</i>Thêm</button>
+        <button data-r="sibling" title="Thêm chủ đề cùng cấp (Enter)"><i data-ic="sibling"></i>Chủ đề</button>
+        <button data-r="child" title="Thêm nhánh con (Tab)"><i data-ic="child"></i>Nhánh con</button>
+        <button data-r="parent" title="Chèn nhánh cha (Ctrl+Enter)"><i data-ic="parent"></i>Nhánh cha</button>
+        <button data-r="note" title="Ghi chú cho nhánh"><i data-ic="note"></i>Ghi chú</button>
+        <button data-r="marker" title="Biểu tượng, tiến độ, ưu tiên"><i data-ic="star"></i>Biểu tượng</button>
+        <button data-r="more" title="Thêm tuỳ chọn"><i data-ic="more"></i>Thêm</button>
       </div>
 
       <div class="stagewrap" id="stagewrap">
@@ -137,10 +172,11 @@
           <input id="searchQ" placeholder="Tìm trong sơ đồ…"><span id="searchN"></span>
           <button class="tb" id="searchPrev">↑</button><button class="tb" id="searchNext">↓</button><button class="tb" id="searchX">✕</button>
         </div>
+        <button class="insp-open" id="inspOpen" title="Hiện bảng định dạng" hidden><i data-ic="panel-right"></i></button>
         <canvas id="mini" width="400" height="260" title="Bản đồ thu nhỏ"></canvas>
         <div class="zoombar">
-          <button id="zOut" title="Thu nhỏ (Ctrl + -)">−</button><button id="zIn" title="Phóng to (Ctrl + +)">+</button>
-          <button id="zFit" title="Vừa màn hình (Ctrl+0)">⤢</button><button id="zHelp" title="Phím tắt">?</button>
+          <button id="zOut" title="Thu nhỏ (Ctrl + -)"><i data-ic="minus"></i></button><button id="zIn" title="Phóng to (Ctrl + +)"><i data-ic="plus"></i></button>
+          <button id="zFit" title="Vừa màn hình (Ctrl+0)"><i data-ic="fit"></i></button><button id="zHelp" title="Phím tắt"><i data-ic="help"></i></button>
         </div>
         <div class="qbar" id="qbar">
           <button data-q="child">＋ Nhánh con</button><button data-q="sibling">＋ Cùng cấp</button>
@@ -157,7 +193,7 @@
       </div>
 
       <aside class="insp" id="insp" hidden>
-        <div class="tabs"><button data-tab="node" class="on">Nhánh</button><button data-tab="doc">Sơ đồ</button></div>
+        <div class="tabs"><button data-tab="node" class="on">Nhánh</button><button data-tab="doc">Sơ đồ</button><button class="insp-x" id="inspClose" title="Ẩn bảng định dạng"><i data-ic="panel-close"></i></button></div>
         <div id="tabNode">
           <div class="hint" id="nodeHint">Chọn một nhánh để định dạng. Bấm đúp (hoặc F2) để sửa chữ: thanh định dạng sẽ hiện ngay trên nhánh để tô đậm, tô màu, highlight từng đoạn chữ.</div>
           <div id="nodeForm" hidden>
@@ -221,6 +257,7 @@
 
 <script src="config.js"></script>
 <script src="js/mindmap.js"></script>
+<script src="js/icons.js"></script>
 <script src="js/templates.js"></script>
 <script src="js/io.js"></script>
 <script src="js/cloud.js"></script>

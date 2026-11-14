@@ -1,4 +1,4 @@
-# Mind Map DNU: hướng dẫn triển khai
+# Mind Map: hướng dẫn triển khai
 
 Ứng dụng là một trang web tĩnh (GitHub Pages) + một Google Apps Script nhỏ làm "cổng phân quyền".
 
@@ -9,7 +9,7 @@ Trình duyệt ──đăng nhập Google──▶ Google (token drive.file, 1 g
 ```
 
 * Admin (`duongthanhtu.dnu@gmail.com`) cố định trong `Code.gs`. Người khác đăng nhập → gửi yêu cầu → admin duyệt và đặt quyền (PDF / XMind / xuất tệp / số sơ đồ tối đa) ngay trong ứng dụng, mục **Quản trị**.
-* Apps Script chỉ giữ danh sách người dùng và quyền. Nó **không** giữ token Drive và không đọc được sơ đồ của ai.
+* Apps Script giữ **danh sách người dùng và quyền**, và (để người dùng không phải đăng nhập lại mỗi giờ) giữ cả **khoá làm mới (refresh token)** của từng người. Khoá này chỉ có quyền `drive.file`: truy cập các tệp do ứng dụng tạo và thư mục người dùng chọn, không phải toàn bộ Drive. **Hệ quả về quyền riêng tư:** về kỹ thuật, bạn (chủ Apps Script) có thể truy cập các tệp sơ đồ của người dùng; hãy thông báo điều này cho họ. Người dùng thu hồi bằng *Đăng xuất* hoặc tại <https://myaccount.google.com/permissions>; bạn xoá một người dùng trong mục Quản trị thì khoá của họ cũng bị thu hồi.
 * Quyền `drive.file` thuộc loại không nhạy cảm, nên không cần Google xác minh ứng dụng và không bị giới hạn 100 người dùng thử.
 
 ## 1. Đưa code lên GitHub Pages
@@ -22,13 +22,13 @@ Trình duyệt ──đăng nhập Google──▶ Google (token drive.file, 1 g
 3. **OAuth consent screen**: User type **External**; điền tên ứng dụng, email hỗ trợ; Scopes: `openid`, `email`, `profile`, `.../auth/drive.file`; cuối cùng bấm **Publish app** (chuyển sang *In production*, nếu để *Testing* thì chỉ test users đăng nhập được).
 4. **Credentials → Create credentials → OAuth client ID → Web application**.
    * *Authorized JavaScript origins*: `https://<tên-github>.github.io` (chỉ domain, không có đường dẫn; thêm `http://localhost:8000` nếu muốn thử máy bạn).
-   * Không cần Client secret. Sao chép **Client ID**.
+   * Sao chép **Client ID** và **Client secret** (bấm vào client đã tạo; nếu secret đã lộ ở đâu đó, hãy *Add secret* mới rồi vô hiệu hoá secret cũ). Client secret chỉ được dán vào **Script properties của Apps Script**, tuyệt đối không đưa vào `config.js` hay lên GitHub.
 5. (Tuỳ chọn, cho nút chọn thư mục) **Create credentials → API key**: giới hạn *Application restrictions* = HTTP referrers `https://<tên-github>.github.io/*`, *API restrictions* = Google Picker API. **Project number** của project (trang Dashboard) chính là `APP_ID`.
 
 ## 3. Apps Script: cổng phân quyền
 1. Đăng nhập **đúng tài khoản admin** (`duongthanhtu.dnu@gmail.com`), mở <https://script.google.com> → New project.
 2. Dán toàn bộ `Code.gs` thay nội dung mặc định.
-3. Project Settings → **Script properties** → thêm `GOOGLE_CLIENT_ID` = Client ID ở bước 2. (Tuỳ chọn: `ADMIN_EMAIL` để đổi admin; `AUTO_APPROVE` = `true` để ai đăng ký cũng được duyệt luôn.)
+3. Project Settings → **Script properties** → thêm 2 mục bắt buộc: `GOOGLE_CLIENT_ID` = Client ID, và `GOOGLE_CLIENT_SECRET` = Client secret ở bước 2. (Tuỳ chọn: `ADMIN_EMAIL` để đổi admin; `AUTO_APPROVE` = `true` để ai đăng ký cũng được duyệt luôn.)
 4. Chạy hàm `authorize` một lần (Run) để cấp quyền cho script (kết nối ngoài, lưu thuộc tính).
 5. **Deploy → New deployment → Web app**: *Execute as*: **Me**; *Who has access*: **Anyone**. Sao chép URL kết thúc bằng `/exec`.
 6. Mỗi lần sửa `Code.gs`, phải **Deploy → Manage deployments → Edit → New version**.
@@ -50,6 +50,8 @@ window.MM_CONFIG = {
 
 ## Lưu ý quan trọng
 * **Quyền `drive.file`**: ứng dụng chỉ thấy tệp do chính nó tạo, hoặc thư mục/tệp người dùng chọn qua Picker. Vì vậy dán link một thư mục bất kỳ sẽ báo "chưa có quyền", đây là cơ chế an toàn của Google, không phải lỗi. Muốn bỏ giới hạn này phải dùng scope `drive` (nhạy cảm, cần Google xác minh), không khuyến nghị.
-* **Token 1 giờ**: ứng dụng tự gia hạn ở lần bấm chuột kế tiếp (trình duyệt chỉ cho mở popup gia hạn khi có thao tác của người dùng). Nếu hết hạn lúc đang gõ, bản nháp vẫn được giữ trên máy, dòng trạng thái sẽ cho bạn bấm để gia hạn.
+* **Kết nối liên tục**: lần đăng nhập đầu, Google cấp một mã uỷ quyền; Apps Script đổi lấy khoá làm mới và cấp cho trình duyệt một "khoá phiên" riêng (tối đa 6 thiết bị/người). Sau đó trình duyệt tự xin token 1 giờ mới qua Apps Script, không popup, không đăng nhập lại; mở lại trang là vào thẳng. Nếu người dùng thu hồi quyền ở Google, hoặc admin khoá/xoá họ, kết nối dừng và họ phải đăng nhập lại.
+* **Tài khoản đã từng cấp quyền trước đó (ví dụ admin đã thử bản cũ)**: Google chỉ trả khoá làm mới ở lần cấp quyền đầu tiên. Nếu app báo "Google chưa cấp quyền kết nối lâu dài", vào <https://myaccount.google.com/permissions>, chọn ứng dụng, bấm **Remove access**, rồi đăng nhập lại.
+* **Sau khi cập nhật `Code.gs`**: Deploy → Manage deployments → ✏️ → Version: **New version** → Deploy (URL `/exec` giữ nguyên).
 * **Phân quyền là "mềm"**: trang là mã tĩnh, nên người rành kỹ thuật có thể sửa mã trên máy mình để bỏ qua kiểm tra quyền (PDF/XMind/xuất tệp/giới hạn số sơ đồ). Họ chỉ ghi được vào Drive của chính họ, nên không ảnh hưởng ai khác. Việc cho phép đăng nhập/đăng ký và danh sách người dùng thì do máy chủ Apps Script quyết định.
 * Xung đột nhiều thiết bị: trước khi lưu, app so thời gian sửa trên Drive, nếu bản Drive mới hơn sẽ hỏi trước khi ghi đè.

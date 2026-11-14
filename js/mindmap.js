@@ -182,7 +182,9 @@ class MindMap {
     this.svg = document.createElementNS(SVGNS, 'svg'); this.svg.setAttribute('class', 'mm-links');
     this.layer = $('div', 'mm-nodes');
     this.stage.append(this.svg, this.layer); this.vp.append(this.stage); host.append(this.vp);
-    this.buildFmt(); this.bind();
+    this.fmt = $('div'); this.fmt.hidden = true;
+    if (!o.static) this.buildFmt();
+    this.bind();
     this.load(MindMap.blank());
   }
   static blank(title = 'Bản đồ mới') {
@@ -295,15 +297,21 @@ class MindMap {
     this.drawLinks(); this.o.onLayout && this.o.onLayout();
   }
   layoutH(R, mode) {
-    const GY = 12, GX = 44, GX0 = 72;
+    const GY = 16, GX = 44, GX0 = 72;
     const kids = n => n.collapsed ? [] : n.children;
     const ext = n => { const ks = kids(n); if (!ks.length) return n._ext = n._h; let s = GY * (ks.length - 1); ks.forEach(k => s += ext(k)); return n._ext = Math.max(n._h, s); };
+    const dlt = n => { const st = this.sty.get(n.id); return st && st.bottom ? n._h / 2 : 0; };   // anchor offset below the box centre
+    const spread = (ks, pa) => {   // centres of child slots, shifted so the child anchors are symmetric about the parent anchor
+      let tot = GY * (ks.length - 1); ks.forEach(k => tot += k._ext);
+      let y = -tot / 2; const cc = ks.map(k => { const c = y + k._ext / 2; y += k._ext + GY; return c; });
+      const an = ks.map((k, i) => cc[i] + dlt(k)), shift = pa - (Math.min(...an) + Math.max(...an)) / 2;
+      return cc.map(c => c + shift);
+    };
     const place = (n, edge, yc, dir) => {
       n._dir = dir; n._x = dir > 0 ? edge : edge - n._w; n._y = yc - n._h / 2;
       const ks = kids(n); if (!ks.length) return;
-      let tot = GY * (ks.length - 1); ks.forEach(k => tot += k._ext);
-      let y = yc - tot / 2; const ce = dir > 0 ? n._x + n._w + GX : n._x - GX;
-      ks.forEach(k => { place(k, ce, y + k._ext / 2, dir); y += k._ext + GY; });
+      const cs = spread(ks, dlt(n)), ce = dir > 0 ? n._x + n._w + GX : n._x - GX;
+      ks.forEach((k, i) => place(k, ce, yc + cs[i], dir));
     };
     ext(R); R._x = -R._w / 2; R._y = -R._h / 2; R._dir = 0;
     const ks = kids(R); let groups;
@@ -316,9 +324,8 @@ class MindMap {
     }
     groups.forEach(([list, dir]) => {
       if (!list.length) return;
-      let tot = GY * (list.length - 1); list.forEach(k => tot += k._ext);
-      let y = -tot / 2; const edge = dir > 0 ? R._x + R._w + GX0 : R._x - GX0;
-      list.forEach(k => { place(k, edge, y + k._ext / 2, dir); y += k._ext + GY; });
+      const cs = spread(list, 0), edge = dir > 0 ? R._x + R._w + GX0 : R._x - GX0;
+      list.forEach((k, i) => place(k, edge, cs[i], dir));
     });
   }
   layoutOrg(R) {
@@ -443,6 +450,7 @@ class MindMap {
       if (el && !this.sel.has(el.dataset.id)) this.select(el.dataset.id);
       this.o.onContext && this.o.onContext(el ? el.dataset.id : null, e.clientX, e.clientY);
     });
+    if (this.o.static) return;
     document.addEventListener('keydown', e => this.onKey(e));
     document.addEventListener('copy', e => this.onCopy(e, false));
     document.addEventListener('cut', e => this.onCopy(e, true));

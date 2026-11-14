@@ -104,7 +104,7 @@ async function exportXMind(doc) {
   };
   const zip = new JSZip();
   zip.file('content.json', JSON.stringify([{ id: uid(), class: 'sheet', title: doc.title, rootTopic: topic(doc.root, true) }]));
-  zip.file('metadata.json', JSON.stringify({ creator: { name: 'Mind Map DNU' } }));
+  zip.file('metadata.json', JSON.stringify({ creator: { name: 'Mind Map' } }));
   zip.file('manifest.json', JSON.stringify({ 'file-entries': { 'content.json': {}, 'metadata.json': {} } }));
   return zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.xmind.workbook' });
 }

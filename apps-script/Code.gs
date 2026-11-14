@@ -1,23 +1,34 @@
 /**
- * Mind Map DNU - cổng phân quyền (Google Apps Script web app)
+ * Mind Map - cổng phân quyền + giữ kết nối Google Drive (Google Apps Script web app)
  *
- * Vai trò: giữ DANH SÁCH NGƯỜI DÙNG và QUYỀN. Script này KHÔNG giữ token Drive của ai
- * và không đọc được sơ đồ của người dùng (sơ đồ nằm trong Drive của chính họ).
+ * Làm 2 việc:
+ *  1) Giữ DANH SÁCH NGƯỜI DÙNG và QUYỀN (admin duyệt, đặt quyền).
+ *  2) Giữ "khoá làm mới" (refresh token) của từng người dùng để họ KHÔNG phải đăng nhập lại mỗi giờ.
+ *     Khoá này chỉ có quyền drive.file: truy cập các tệp do chính ứng dụng tạo (và thư mục người dùng chọn).
+ *     Người dùng thu hồi được bất cứ lúc nào (Đăng xuất, hoặc myaccount.google.com/permissions).
  *
  * Script properties (Project Settings -> Script properties):
- *   GOOGLE_CLIENT_ID   OAuth Client ID mà ứng dụng dùng (bắt buộc)
- *   ADMIN_EMAIL        (tuỳ chọn) đổi email admin, mặc định như bên dưới
- *   AUTO_APPROVE       (tuỳ chọn) 'true' = ai đăng ký cũng được duyệt luôn
+ *   GOOGLE_CLIENT_ID      OAuth Client ID (bắt buộc)
+ *   GOOGLE_CLIENT_SECRET  Client secret của đúng Client ID đó (bắt buộc)
+ *   ADMIN_EMAIL           (tuỳ chọn) đổi email admin, mặc định bên dưới
+ *   AUTO_APPROVE          (tuỳ chọn) 'true' = ai đăng ký cũng được duyệt luôn
  */
 var DEFAULT_ADMIN = 'duongthanhtu.dnu@gmail.com';
 var DEFAULT_PERMS = { pdf: true, xmind: true, export: true, maxMaps: 100 };
+var MAX_SESSIONS = 6;      // số thiết bị/trình duyệt được ghi nhớ cho mỗi người
 
 function prop_(k) { return PropertiesService.getScriptProperties().getProperty(k); }
+function setProp_(k, v) { PropertiesService.getScriptProperties().setProperty(k, v); }
+function delProp_(k) { PropertiesService.getScriptProperties().deleteProperty(k); }
 function admin_() { return String(prop_('ADMIN_EMAIL') || DEFAULT_ADMIN).toLowerCase(); }
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
-function fail_(code) { return json_({ ok: false, error: code }); }
+function fail_(code, detail) { return json_({ ok: false, error: code, detail: detail || undefined }); }
 function hash_(s) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s).map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join('');
+}
+function post_(payload) {
+  var r = UrlFetchApp.fetch('https://oauth2.googleapis.com/token', { method: 'post', payload: payload, muteHttpExceptions: true });
+  try { return JSON.parse(r.getContentText() || '{}'); } catch (e) { return {}; }
 }
 
 /** Xác thực access token của Google -> email đã xác minh (và chắc chắn token cấp cho đúng ứng dụng này). */
@@ -35,8 +46,9 @@ function verify_(token) {
   return u;
 }
 
+/* ---------- người dùng & quyền ---------- */
 function getUser_(email) { var s = prop_('U:' + email); return s ? JSON.parse(s) : null; }
-function putUser_(u) { PropertiesService.getScriptProperties().setProperty('U:' + u.email, JSON.stringify(u)); }
+function putUser_(u) { setProp_('U:' + u.email, JSON.stringify(u)); }
 function allUsers_() {
   var p = PropertiesService.getScriptProperties().getProperties(), out = [];
   for (var k in p) if (k.indexOf('U:') === 0) { try { out.push(JSON.parse(p[k])); } catch (e) {} }
@@ -59,14 +71,74 @@ function view_(u) {
   };
 }
 
+/* ---------- giữ kết nối Drive (refresh token) ---------- */
+function getKeys_(email) { var s = prop_('K:' + email); try { return s ? JSON.parse(s) : []; } catch (e) { return []; } }
+function setKeys_(email, list) { if (list.length) setProp_('K:' + email, JSON.stringify(list)); else delProp_('K:' + email); }
+function cacheToken_(email, token, expiresIn) {
+  CacheService.getScriptCache().put('at:' + email, JSON.stringify({ t: token, exp: Date.now() + (expiresIn || 3600) * 1000 }), 3000);
+}
+function dropLink_(email) {
+  var rt = prop_('R:' + email);
+  if (rt) { try { UrlFetchApp.fetch('https://oauth2.googleapis.com/revoke?token=' + encodeURIComponent(rt), { method: 'post', muteHttpExceptions: true }); } catch (e) {} }
+  delProp_('R:' + email); delProp_('K:' + email); CacheService.getScriptCache().remove('at:' + email);
+}
+
+/** Đăng nhập lần đầu: đổi "mã uỷ quyền" của Google lấy token, lưu khoá làm mới, cấp "khoá phiên" cho thiết bị này. */
+function link_(req, lock) {
+  if (!prop_('GOOGLE_CLIENT_ID') || !prop_('GOOGLE_CLIENT_SECRET')) return fail_('no_secret');
+  var t = post_({ code: String(req.code || ''), client_id: prop_('GOOGLE_CLIENT_ID'), client_secret: prop_('GOOGLE_CLIENT_SECRET'), redirect_uri: 'postmessage', grant_type: 'authorization_code' });
+  if (!t.access_token) return fail_('exchange', t.error_description || t.error || '');
+  var who = verify_(t.access_token); if (!who) return fail_('bad_token');
+  lock.waitLock(20000);
+  var email = who.email, rt = t.refresh_token || prop_('R:' + email);
+  if (!rt) return fail_('no_refresh');       // Google chỉ trả khoá làm mới ở lần cấp quyền đầu tiên
+  if (t.refresh_token) setProp_('R:' + email, t.refresh_token);
+  var sk = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().replace(/-/g, '');
+  var list = getKeys_(email); list.push({ h: hash_(sk), t: Date.now() }); if (list.length > MAX_SESSIONS) list = list.slice(-MAX_SESSIONS);
+  setKeys_(email, list); cacheToken_(email, t.access_token, t.expires_in);
+  return json_({ ok: true, email: email, sk: sk, access_token: t.access_token, expires_in: t.expires_in || 3600 });
+}
+
+/** Các lần sau: đưa "khoá phiên" -> nhận access token mới (không cần popup, không cần bấm gì). */
+function keep_(req) {
+  var email = clean_(req.email, 120).toLowerCase(), sk = String(req.sk || '');
+  if (!email || sk.length < 32) return fail_('bad_session');
+  var h = hash_(sk);
+  if (!getKeys_(email).some(function (x) { return x.h === h; })) return fail_('bad_session');
+  var u = getUser_(email); if (u && u.status === 'blocked' && email !== admin_()) return fail_('blocked');
+  var cache = CacheService.getScriptCache(), c = cache.get('at:' + email);
+  if (c) { c = JSON.parse(c); var left = Math.floor((c.exp - Date.now()) / 1000); if (left > 600) return json_({ ok: true, access_token: c.t, expires_in: left }); }
+  var rt = prop_('R:' + email); if (!rt) return fail_('relink');
+  var t = post_({ client_id: prop_('GOOGLE_CLIENT_ID'), client_secret: prop_('GOOGLE_CLIENT_SECRET'), refresh_token: rt, grant_type: 'refresh_token' });
+  if (!t.access_token) {
+    if (t.error === 'invalid_grant') { dropLink_(email); return fail_('relink'); }   // người dùng đã thu hồi quyền ở Google
+    return fail_('google', t.error || 'unknown');
+  }
+  cacheToken_(email, t.access_token, t.expires_in);
+  return json_({ ok: true, access_token: t.access_token, expires_in: t.expires_in || 3600 });
+}
+
+/** Đăng xuất: xoá khoá phiên của thiết bị này; hết thiết bị thì thu hồi luôn khoá làm mới. */
+function unlink_(req, lock) {
+  var email = clean_(req.email, 120).toLowerCase(), sk = String(req.sk || ''); if (!email || sk.length < 32) return json_({ ok: true });
+  lock.waitLock(20000);
+  var h = hash_(sk), list = getKeys_(email).filter(function (x) { return x.h !== h; });
+  if (!list.length || req.all) dropLink_(email); else setKeys_(email, list);
+  return json_({ ok: true });
+}
+
 function doGet() {
-  return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:18px system-ui;max-width:520px;margin:12vh auto;padding:0 20px"><h2>Mind Map DNU</h2><p>Cổng phân quyền đang chạy. Hãy mở ứng dụng Mind Map để sử dụng.</p></body>');
+  return HtmlService.createHtmlOutput('<meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:18px system-ui;max-width:520px;margin:12vh auto;padding:0 20px"><h2>Mind Map</h2><p>Cổng phân quyền đang chạy. Hãy mở ứng dụng Mind Map để sử dụng.</p></body>');
 }
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
     var req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    if (req.action === 'link') return link_(req, lock);
+    if (req.action === 'keep') return keep_(req);
+    if (req.action === 'unlink') return unlink_(req, lock);
+
     var who = verify_(req.token);
     if (!who) return fail_('bad_token');
     var isAdmin = who.email === admin_();
@@ -115,9 +187,11 @@ function doPost(e) {
         if (p.perms) t.perms = perms_(Object.assign({}, perms_(t.perms), p.perms));
         putUser_(t); return json_({ ok: true });
       }
-      case 'admin.remove':
-        PropertiesService.getScriptProperties().deleteProperty('U:' + clean_(req.email, 120).toLowerCase());
+      case 'admin.remove': {
+        var rem = clean_(req.email, 120).toLowerCase();
+        delProp_('U:' + rem); dropLink_(rem);          // xoá người dùng cũng thu hồi khoá kết nối của họ
         return json_({ ok: true });
+      }
     }
     return fail_('unknown_action');
   } catch (err) {
