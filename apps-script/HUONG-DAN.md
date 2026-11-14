@@ -29,7 +29,7 @@ Trình duyệt ──đăng nhập Google──▶ Google (token drive.file, 1 g
 1. Đăng nhập **đúng tài khoản admin** (`duongthanhtu.dnu@gmail.com`), mở <https://script.google.com> → New project.
 2. Dán toàn bộ `Code.gs` thay nội dung mặc định.
 3. Project Settings → **Script properties** → thêm `GOOGLE_CLIENT_ID` = Client ID ở bước 2. (Tuỳ chọn: `ADMIN_EMAIL` để đổi admin; `AUTO_APPROVE` = `true` để ai đăng ký cũng được duyệt luôn.)
-4. Chạy hàm `authorize_` một lần (Run) để cấp quyền cho script (kết nối ngoài, lưu thuộc tính).
+4. Chạy hàm `authorize` một lần (Run) để cấp quyền cho script (kết nối ngoài, lưu thuộc tính).
 5. **Deploy → New deployment → Web app**: *Execute as*: **Me**; *Who has access*: **Anyone**. Sao chép URL kết thúc bằng `/exec`.
 6. Mỗi lần sửa `Code.gs`, phải **Deploy → Manage deployments → Edit → New version**.
 

@@ -128,4 +128,4 @@ function doPost(e) {
 }
 
 /** Chạy tay MỘT LẦN trong trình soạn thảo để Google hỏi quyền (UrlFetch + Properties + Cache + Lock). */
-function authorize_() { UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=x', { muteHttpExceptions: true }); LockService.getScriptLock(); CacheService.getScriptCache(); PropertiesService.getScriptProperties(); }
+function authorize() { UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?access_token=x', { muteHttpExceptions: true }); LockService.getScriptLock(); CacheService.getScriptCache(); PropertiesService.getScriptProperties(); }
