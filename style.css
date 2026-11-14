@@ -63,7 +63,8 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent2);box-shadow:0
 .lc-google{width:100%;display:flex;align-items:center;gap:12px;padding:15px 22px;border:0;border-radius:999px;font-size:18px;font-weight:700;color:#fff;background:linear-gradient(135deg,#a97bff,#5b47e0);box-shadow:0 10px 30px rgba(124,92,245,.5),inset 0 1px 0 rgba(255,255,255,.3)}
 .lc-google:hover{filter:brightness(1.1)}.lc-google:disabled{opacity:.75;cursor:default}
 .lc-google svg{width:26px;height:26px;padding:4px;border-radius:50%;background:#fff;flex:none}
-.lc-google span{flex:1;text-align:center}.lc-google b{font-size:20px}
+.lc-google span:not(.spin){flex:1;text-align:center}
+.lc-google .spin{flex:none;width:22px;height:22px;border-width:3px;border-color:rgba(255,255,255,.3);border-top-color:#fff;margin:0 2px}.lc-google b{font-size:20px}
 .lc-row{display:flex;justify-content:flex-start;margin:18px 4px 4px}
 .lc-rem{display:inline-flex;align-items:center;gap:11px;font-size:16px;cursor:pointer;color:#f0f1ff}
 .lc-rem input{position:absolute;opacity:0;pointer-events:none}
