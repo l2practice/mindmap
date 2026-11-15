@@ -308,14 +308,14 @@ async function save(force) {
     const doc = bookData(), name = MMIO.safeName(doc.title) + '.mindmap.json', D = Cloud.drive;
     if (!S.fileId) {
       if (!isAdmin() && S.maps.length >= S.me.perms.maxMaps) throw Object.assign(new Error('You have reached the limit of ' + S.me.perms.maxMaps + ' maps set by the administrator.'), { code: 'quota' });
-      const f = await D.create(S.folder.id, name, doc); S.fileId = f.id; S.modified = f.modifiedTime; S.maps.unshift({ id: f.id, name: f.name, modifiedTime: f.modifiedTime });
+      const f = await D.create(S.folder.id, name, doc); S.fileId = f.id; S.modified = f.modifiedTime; thAfterSave(f.id, f.modifiedTime); S.maps.unshift({ id: f.id, name: f.name, modifiedTime: f.modifiedTime });
     } else {
       if (!force && S.modified) {
         let m = null; try { m = await D.meta(S.fileId); } catch (e) { if (e.code === 404) { S.fileId = null; S.saving = false; return save(true); } throw e; }
         if (m.trashed) { S.fileId = null; S.saving = false; return save(true); }
         if (m.modifiedTime !== S.modified && !confirm('The version on Drive is newer than the one you have open (you may have edited on another device).\n\nOK = overwrite it with the open version\nCancel = keep the Drive version (your open version stays in the local draft)')) { setSave('Not saved: version conflict', 'err'); S.saving = false; return; }
       }
-      const f = await D.update(S.fileId, name, doc); S.modified = f.modifiedTime;
+      const f = await D.update(S.fileId, name, doc); S.modified = f.modifiedTime; thAfterSave(S.fileId, f.modifiedTime);
       const it = S.maps.find(x => x.id === S.fileId); if (it) { it.name = f.name; it.modifiedTime = f.modifiedTime; }
     }
     if (S.rev === rev) { S.dirty = false; lsDel('mm-draft'); setSave('Saved to Drive ✓'); } else S.again = true;
@@ -339,9 +339,53 @@ async function loadLibrary() {
   S.mapsLoading = false; refreshLists();
 }
 function refreshLists() { if (S.view === 'home') renderHome(); else if (S.view === 'maps') renderMaps(); }
+/* ---------- map thumbnails: drawn from the map itself, cached on this device ---------- */
+const COVER = '<svg viewBox="0 0 200 110" aria-hidden="true"><g fill="none" stroke-width="3.2" stroke-linecap="round"><path d="M100 55C84 45 72 32 54 29" stroke="#8b5cf6"/><path d="M100 55C118 44 132 30 150 30" stroke="#f59e0b"/><path d="M100 55C84 67 72 80 54 82" stroke="#0ea5e9"/><path d="M100 55C118 68 132 80 150 80" stroke="#ec4899"/></g><rect x="30" y="20" width="36" height="16" rx="8" fill="#c4b5fd"/><rect x="134" y="22" width="38" height="16" rx="8" fill="#fde68a"/><rect x="30" y="74" width="36" height="16" rx="8" fill="#7dd3fc"/><rect x="134" y="72" width="38" height="16" rx="8" fill="#f9a8d4"/><rect x="76" y="42" width="48" height="26" rx="13" fill="#7c5cf5"/><rect x="86" y="52" width="28" height="5" rx="2.5" fill="#fff" opacity=".85"/></svg>';
+const TH = { cache: null, q: [], busy: false, eng: null, fail: new Set(), last: {}, t: 0, W: 420, H: 240 };
+function thCache() { if (!TH.cache) { try { TH.cache = JSON.parse(lsGet('mm-thumbs') || '{}'); } catch (e) { TH.cache = {}; } } return TH.cache; }
+function thSave(id, mod, url) {
+  const c = thCache(); c[id] = { m: mod, u: url, t: Date.now() };
+  const keys = Object.keys(c); if (keys.length > 60) keys.sort((x, y) => c[x].t - c[y].t).slice(0, keys.length - 60).forEach(k => delete c[k]);
+  lsSet('mm-thumbs', JSON.stringify(c));
+}
+async function thDraw(mm) {   // PNG of the sheet that is currently laid out -> small JPEG data URL
+  const blob = await mm.exportPNG(1.5), bmp = await createImageBitmap(blob), c = document.createElement('canvas'); c.width = TH.W; c.height = TH.H;
+  const x = c.getContext('2d'); x.fillStyle = mm.bgColor(); x.fillRect(0, 0, TH.W, TH.H);
+  const s = Math.min((TH.W - 20) / bmp.width, (TH.H - 20) / bmp.height, 1.1), w = bmp.width * s, h = bmp.height * s; x.drawImage(bmp, (TH.W - w) / 2, (TH.H - h) / 2, w, h);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function thEngine() {
+  if (!TH.eng) { const el = document.createElement('div'); el.style.cssText = 'position:fixed;left:-20000px;top:0;width:1100px;height:700px;visibility:hidden;pointer-events:none'; document.body.append(el); TH.eng = new MindMap(el, { static: true }); TH.eng.readOnly = true; }
+  return TH.eng;
+}
+async function thGenerate(m) {
+  const book = toBook(await Cloud.drive.read(m.id)), eng = thEngine(); eng.load(book.sheets[book.active]);
+  await new Promise(r => requestAnimationFrame(r)); return thDraw(eng);
+}
+function thApply(id, url) { document.querySelectorAll('.card[data-id="' + id + '"] .thumb').forEach(t => { t.style.backgroundImage = 'url(' + url + ')'; t.classList.add('img'); }); }
+async function thPump() {
+  if (TH.busy) return; const m = TH.q.shift(); if (!m) return; TH.busy = true;
+  try { const url = await thGenerate(m); thSave(m.id, m.modifiedTime, url); thApply(m.id, url); } catch (e) { TH.fail.add(m.id + '|' + m.modifiedTime); }
+  TH.busy = false; setTimeout(thPump, 80);
+}
+function thWant(m, thumbEl) {
+  const hit = thCache()[m.id];
+  if (hit && hit.m === m.modifiedTime) { thumbEl.style.backgroundImage = 'url(' + hit.u + ')'; thumbEl.classList.add('img'); return; }
+  const key = m.id + '|' + m.modifiedTime; if (TH.fail.has(key) || TH.q.some(q => q.id === m.id && q.modifiedTime === m.modifiedTime)) return;
+  TH.q.push(m); thPump();
+}
+function thAfterSave(id, mod) {   // refresh the thumbnail of the map being edited (at most every 20 s)
+  clearTimeout(TH.t); TH.t = setTimeout(async () => {
+    if (S.view !== 'editor' || !S.mm || S.mm.editing || S.fileId !== id || Date.now() - (TH.last[id] || 0) < 20000) return;
+    TH.last[id] = Date.now(); try { thSave(id, mod, await thDraw(S.mm)); } catch (e) {}
+  }, 1500);
+}
+function thClear() { TH.cache = null; TH.q = []; TH.fail.clear(); try { localStorage.removeItem('mm-thumbs'); } catch (e) {} }
 function mapCard(m) {
   const c = document.createElement('div'); c.className = 'card' + (m.id === S.fileId ? ' cur' : ''); c.tabIndex = 0;
-  c.innerHTML = `<div class="thumb" style="background:linear-gradient(135deg,${gradOf(m.id)})">🧠</div><div class="meta"><div class="nm">${esc(m.name.replace(/\.mindmap\.json$/, ''))}</div><small>${esc(fdate(m.modifiedTime))}</small></div><button class="x" title="Delete (moves to Drive trash)">🗑</button>`;
+  c.dataset.id = m.id;
+  c.innerHTML = `<div class="thumb" style="background-image:linear-gradient(135deg,${gradOf(m.id)})">${COVER}</div><div class="meta"><div class="nm">${esc(m.name.replace(/\.mindmap\.json$/, ''))}</div><small>${esc(fdate(m.modifiedTime))}</small></div><button class="x" title="Delete (moves to Drive trash)">🗑</button>`;
+  thWant(m, c.querySelector('.thumb'));
   c.onclick = e => { if (e.target.closest('.x')) return; openMap(m.id); };
   c.onkeydown = e => { if (e.key === 'Enter') openMap(m.id); };
   c.querySelector('.x').onclick = async () => {
@@ -603,8 +647,8 @@ function renderCloud() {
   };
   $('#clSw').onclick = switchAccount; $('#clOut').onclick = logout;
 }
-async function switchAccount() { await flush(); await Cloud.signOut(); S.me = null; gateLogin('', true); }
-async function logout() { await flush(); await Cloud.signOut(); S.me = null; gateLogin(); }
+async function switchAccount() { await flush(); thClear(); await Cloud.signOut(); S.me = null; gateLogin('', true); }
+async function logout() { await flush(); thClear(); await Cloud.signOut(); S.me = null; gateLogin(); }
 
 /* ---------- settings page ---------- */
 let setTab = 'general';
