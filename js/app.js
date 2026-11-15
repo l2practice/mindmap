@@ -670,7 +670,7 @@ function initInspector() {
     const b = document.createElement('button'); b.dataset.t = k; b.innerHTML = `<i style="background:${t.bg}">${t.branches.slice(0, 5).map(c => `<b style="background:${c}"></b>`).join('')}</i>${esc(t.name)}`;
     b.onclick = () => { mm().setTheme(k); syncInspectorDoc(); }; $('#dThemes').append(b);
   });
-  $('#dBg').onchange = e => mm().setDocOpt('bg', e.target.value); $('#dBgX').onclick = () => mm().setDocOpt('bg', ''); $('#dGrid').onchange = e => mm().setDocOpt('grid', e.target.checked);
+  $('#dBg').onchange = e => mm().setDocOpt('bg', e.target.value); $('#dBgX').onclick = () => mm().setDocOpt('bg', ''); $('#dPat').onchange = e => mm().setDocOpt('pattern', e.target.value);
   $('#dMono').onchange = e => mm().setDocOpt('mono', !e.target.checked); $('#dNotes').onchange = e => mm().setDocOpt('notes', e.target.checked); $('#dLineW').onchange = e => mm().setDocOpt('lineW', e.target.value);
   $('#dLine').onchange = e => mm().setLineStyle(e.target.value); $('#dExpand').onclick = () => mm().expandAll(true); $('#dCollapse').onclick = () => mm().expandAll(false);
   syncInspectorDoc();
@@ -678,7 +678,7 @@ function initInspector() {
 function syncInspectorDoc() {
   const d = S.mm.doc; $$('#dLayouts button').forEach(b => b.classList.toggle('on', b.dataset.l === d.layout));
   $$('#dThemes button').forEach(b => b.classList.toggle('on', b.dataset.t === d.theme)); $('#dLine').value = d.lineStyle;
-  $('#dBg').value = d.bg || S.mm.bgColor(); $('#dGrid').checked = d.grid !== false; $('#dMono').checked = !d.mono; $('#dNotes').checked = !!d.notes; $('#dLineW').value = d.lineW || 'auto'; updateInspector();
+  $('#dBg').value = d.bg || S.mm.bgColor(); $('#dPat').value = MindMap.patOf ? MindMap.patOf(d) : (d.pattern || 'dots'); $('#dMono').checked = !d.mono; $('#dNotes').checked = !!d.notes; $('#dLineW').value = d.lineW || 'auto'; updateInspector();
 }
 function updateInspector() {
   updateAICtx();

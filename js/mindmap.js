@@ -20,6 +20,21 @@ function safeUrl(u) {
 }
 
 /* ---------- Themes & markers ---------- */
+const PATTERNS = { none: 'None', dots: 'Dots', grid: 'Grid', ruled: 'Lines', cross: 'Crosses', diag: 'Diagonal' };
+const patOf = d => PATTERNS[d.pattern] ? d.pattern : (d.grid === false ? 'none' : 'dots');   // older maps only had a dot-grid on/off switch
+function patternCss(p, dark) {
+  const c = dark ? 'rgba(255,255,255,.09)' : 'rgba(120,120,160,.2)', c2 = dark ? 'rgba(255,255,255,.14)' : 'rgba(120,120,160,.3)';
+  const lin = (a, col) => `linear-gradient(${a},${col} 1px,transparent 1px)`;
+  switch (p) {
+    case 'grid': return { image: `${lin('90deg', c2)},${lin('0deg', c2)}`, size: '24px 24px' };
+    case 'ruled': return { image: lin('0deg', c2), size: '100% 28px' };
+    case 'cross': return { image: `${lin('90deg', c)},${lin('0deg', c)},${lin('90deg', c2)},${lin('0deg', c2)}`, size: '12px 12px,12px 12px,96px 96px,96px 96px' };
+    case 'diag': return { image: `repeating-linear-gradient(45deg,${c} 0 1px,transparent 1px 16px)`, size: 'auto' };
+    case 'none': return { image: 'none', size: 'auto' };
+    default: return { image: `radial-gradient(${dark ? 'rgba(255,255,255,.12)' : 'rgba(120,120,160,.3)'} 1.2px,transparent 1.2px)`, size: '22px 22px' };
+  }
+}
+const patternStyle = (p, dark) => { const t = patternCss(patOf({ pattern: p }), dark); return t.image === 'none' ? '' : `background-image:${t.image};background-size:${t.size};`; };
 const THEMES = {
   classic: { name: 'Classic', bg: '#f6f7fb', text: '#1f2937', root: ['#1f2937', '#ffffff'], dark: false, branches: ['#2563eb', '#16a34a', '#ea580c', '#9333ea', '#dc2626', '#0891b2', '#ca8a04', '#db2777'] },
   fresh:   { name: 'Fresh', bg: '#f1fbf7', text: '#12372a', root: ['#0f766e', '#ffffff'], dark: false, branches: ['#14b8a6', '#22c55e', '#65a30d', '#06b6d4', '#0ea5e9', '#10b981', '#84cc16', '#0d9488'] },
@@ -201,7 +216,7 @@ class MindMap {
       layout: ['map', 'right', 'left', 'org'].includes(d.layout) ? d.layout : 'map',
       theme: THEMES[d.theme] ? d.theme : 'classic',
       lineStyle: ['curve', 'elbow', 'straight'].includes(d.lineStyle) ? d.lineStyle : 'curve',
-      grid: d.grid !== false, bg: isHex(d.bg) ? d.bg : '', lineW: ['thin', 'thick'].includes(d.lineW) ? d.lineW : 'auto', mono: !!d.mono, notes: !!d.notes,
+      pattern: patOf(d), bg: isHex(d.bg) ? d.bg : '', lineW: ['thin', 'thick'].includes(d.lineW) ? d.lineW : 'auto', mono: !!d.mono, notes: !!d.notes,
       root: norm(d.root || { text: d.title || 'Central topic' })
     };
     this.sel.clear(); this.primary = null; this.hits.clear();
@@ -223,7 +238,7 @@ class MindMap {
       o.children = n.children.map(clean); return o;
     };
     const d = this.doc;
-    return { v: 1, id: d.id, title: d.title, layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, grid: d.grid, bg: d.bg, lineW: d.lineW, mono: d.mono, notes: d.notes, root: clean(d.root) };
+    return { v: 1, id: d.id, title: d.title, layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, pattern: d.pattern, bg: d.bg, lineW: d.lineW, mono: d.mono, notes: d.notes, root: clean(d.root) };
   }
   theme() {
     const base = THEMES[this.themeOverride || this.doc.theme] || THEMES.classic;
@@ -251,7 +266,7 @@ class MindMap {
   changed() { this.o.onChange && this.o.onChange(); }
   restore(s) {
     const d = JSON.parse(s); this.endEdit(false);
-    Object.assign(this.doc, { layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, grid: d.grid !== false, bg: d.bg || '', lineW: d.lineW || 'auto', mono: !!d.mono, notes: !!d.notes, root: norm(d.root) });
+    Object.assign(this.doc, { layout: d.layout, theme: d.theme, lineStyle: d.lineStyle, pattern: patOf(d), bg: d.bg || '', lineW: d.lineW || 'auto', mono: !!d.mono, notes: !!d.notes, root: norm(d.root) });
     this.reindex(); this.render(); this.changed();
   }
   undo() { if (this.hp > 0) { this.hp--; this.restore(this.hist[this.hp]); } }
@@ -261,7 +276,7 @@ class MindMap {
   /* ----- rendering ----- */
   render() {
     const th = this.theme();
-    const bg = this.bgColor(); this.vp.style.background = bg; this.vp.classList.toggle('dark', this.doc.bg ? contrast(bg) === '#ffffff' : th.dark); this.vp.classList.toggle('nogrid', this.doc.grid === false);
+    const bg = this.bgColor(); this.vp.style.background = bg; this.vp.classList.toggle('dark', this.doc.bg ? contrast(bg) === '#ffffff' : th.dark); const pt = patternCss(this.doc.pattern, this.vp.classList.contains('dark')); this.vp.style.backgroundImage = pt.image; this.vp.style.backgroundSize = pt.size;
     this.layer.innerHTML = ''; this.els.clear(); this.bc = new Map(); this.sty = new Map();
     const walk = (n, d, bc) => {
       this.bc.set(n.id, bc);
@@ -886,7 +901,7 @@ class MindMap {
     clone.querySelectorAll('.fold:not(.on)').forEach(e => e.remove());
     clone.querySelectorAll('[contenteditable]').forEach(e => e.removeAttribute('contenteditable'));
     const wrap = document.createElement('div');
-    wrap.style.cssText = `position:relative;width:${w}px;height:${h}px;background:${this.bgColor()};overflow:hidden;font-family:'Google Sans','Google Sans Flex',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif`;
+    wrap.style.cssText = `position:relative;width:${w}px;height:${h}px;background:${this.bgColor()};${patternStyle(this.doc.pattern, this.doc.bg ? contrast(this.bgColor()) === '#ffffff' : this.theme().dark)}overflow:hidden;font-family:'Google Sans','Google Sans Flex',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif`;
     wrap.append(clone);
     const xml = new XMLSerializer().serializeToString(wrap);
     return { w, h, svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><style><![CDATA[${MindMap.fontCss || ''}${this.cssText()}]]></style><foreignObject x="0" y="0" width="${w}" height="${h}">${xml}</foreignObject></svg>` };
@@ -922,5 +937,5 @@ MindMap.loadFontCss = async function () {
 };
 MindMap.THEMES = THEMES; MindMap.MARKER_GROUPS = MARKER_GROUPS; MindMap.markerEl = markerEl; MK && (MindMap.MK = MK);
 MindMap.parseOutline = parseOutline; MindMap.norm = norm; MindMap.uid = uid; MindMap.sanitize = sanitize; MindMap.safeUrl = safeUrl; MindMap.esc = esc;
-g.MindMap = MindMap;
+g.MindMap = MindMap; MindMap.patOf = patOf; MindMap.PATTERNS = PATTERNS;
 })(window);

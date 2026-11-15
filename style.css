@@ -284,8 +284,7 @@ td input[type=number]{width:74px;padding:5px 8px}
 #toast div.bad{background:#b91c1c}
 
 /* ---------- mind map canvas ---------- */
-.mm-viewport{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;outline:none;user-select:none;-webkit-user-select:none;background-image:radial-gradient(rgba(120,120,160,.16) 1px,transparent 1px);background-size:22px 22px}
-.mm-viewport.dark{background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px)}
+.mm-viewport{position:absolute;inset:0;overflow:hidden;touch-action:none;cursor:grab;outline:none;user-select:none;-webkit-user-select:none}
 .mm-viewport.panning,.mm-viewport.dragmode{cursor:grabbing}
 .mm-stage{position:absolute;left:0;top:0;transform-origin:0 0}
 .mm-links{position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible;pointer-events:none}
@@ -424,7 +423,6 @@ td input[type=number]{width:74px;padding:5px 8px}
 }
 
 /* ---------- map options / misc ---------- */
-.mm-viewport.nogrid{background-image:none!important}
 .node .note-body{font-size:12px;font-weight:400;font-style:normal;opacity:.85;margin-top:4px;white-space:pre-wrap;max-width:300px;line-height:1.4}
 .chk{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;color:var(--text)!important;font-size:13px!important;cursor:pointer}
 .chk input{width:16px;height:16px;accent-color:var(--accent)}
