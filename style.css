@@ -473,3 +473,5 @@ input[type=password]:focus{border-color:var(--accent2);box-shadow:0 0 0 3px var(
 .lg-ink{stroke:var(--logo-ink)}
 .gate{--logo-ink:#eef0ff}
 .avatar{object-fit:cover}
+
+#mSort{padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:13px}

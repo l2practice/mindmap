@@ -109,7 +109,7 @@ const multipart = (meta, content) => {
 const drive = {
   async list(folderId) {
     const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and name contains '.mindmap.json'`);
-    const r = await dfetch(`${D}?q=${q}&orderBy=modifiedTime desc&pageSize=500&fields=files(id,name,modifiedTime)`);
+    const r = await dfetch(`${D}?q=${q}&orderBy=modifiedTime desc&pageSize=500&fields=files(id,name,modifiedTime,createdTime)`);
     return ((await r.json()).files || []).filter(f => /\.mindmap\.json$/.test(f.name));   // never list sub-folders such as the Recycle Bin
   },
   async read(id) { return (await dfetch(`${D}/${id}?alt=media`)).json(); },

@@ -16,6 +16,15 @@ const fdate = t => t ? new Date(t).toLocaleString('en-US', { dateStyle: 'short',
 /* ---------- preferences (per device) ---------- */
 const P = Object.assign({ autosave: true, zoom: 'fit', appTheme: 'system', mapTheme: 'classic', layout: 'map' }, (() => { try { return JSON.parse(lsGet('mm-prefs') || '{}'); } catch (e) { return {}; } })());
 if (!MindMap.THEMES[P.mapTheme]) P.mapTheme = 'classic';   // themes that no longer exist fall back to Classic
+const OPENED = { get() { try { return JSON.parse(lsGet('mm-opened') || '{}'); } catch (e) { return {}; } },
+  mark(id) { if (!id) return; const o = this.get(); o[id] = Date.now(); const k = Object.keys(o); if (k.length > 300) k.sort((x, y) => o[x] - o[y]).slice(0, k.length - 300).forEach(z => delete o[z]); lsSet('mm-opened', JSON.stringify(o)); } };
+const mapTitle = m => m.name.replace(/\.mindmap\.json$/i, '');
+function sortMaps(list, mode) {
+  const t = s => Date.parse(s) || 0, o = mode === 'recent' ? OPENED.get() : {}, nm = (x, y) => mapTitle(x).localeCompare(mapTitle(y), undefined, { numeric: true, sensitivity: 'base' });
+  const f = { modified: (x, y) => t(y.modifiedTime) - t(x.modifiedTime), recent: (x, y) => Math.max(o[y.id] || 0, t(y.modifiedTime)) - Math.max(o[x.id] || 0, t(x.modifiedTime)),
+    newest: (x, y) => t(y.createdTime) - t(x.createdTime), oldest: (x, y) => t(x.createdTime) - t(y.createdTime), az: nm, za: (x, y) => nm(y, x) }[mode] || (() => 0);
+  return list.slice().sort(f);
+}
 const savePrefs = () => lsSet('mm-prefs', JSON.stringify(P));
 const isDark = () => P.appTheme === 'dark' || (P.appTheme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
 function applyAppTheme() {
@@ -134,7 +143,7 @@ function initShell() {
   $('#ucOut').onclick = logout;
   $('#hNew').onclick = () => newMap(); $('#mNew').onclick = () => newMap(); $('#hTpl').onclick = () => go('templates');
   $('#hImport').onclick = () => pickFile('.xmind,.pdf,.md,.markdown,.txt,.json'); $('#mImport').onclick = () => pickFile('.xmind,.pdf,.md,.markdown,.txt,.json');
-  $('#mRef').onclick = async () => { await loadLibrary(); toast('List reloaded'); }; $('#mQ').oninput = renderMaps; $('#tQ').oninput = renderTemplates;
+  $('#mRef').onclick = async () => { await loadLibrary(); toast('List reloaded'); }; $('#mQ').oninput = renderMaps; $('#mSort').onchange = e => { P.sort = e.target.value; savePrefs(); renderMaps(); }; $('#tQ').oninput = renderTemplates;
   $('#adRef').onclick = renderAdmin; $('#binRef').onclick = renderBin;
   $('#fileIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) doImport(f); };
   window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
@@ -211,7 +220,7 @@ function toBook(d) {
 function commitSheet() { if (S.book && S.mm) S.book.sheets[S.book.active] = S.mm.serialize(); }
 function bookData() { commitSheet(); return { v: 2, id: S.book.id, title: S.book.title, active: S.book.active, sheets: S.book.sheets }; }
 function showDoc(d, fileId, modified) {
-  S.book = toBook(d); go('editor'); S.mm.load(S.book.sheets[S.book.active]); S.fileId = fileId || null; S.modified = modified || null;
+  S.book = toBook(d); go('editor'); S.mm.load(S.book.sheets[S.book.active]); S.fileId = fileId || null; S.modified = modified || null; OPENED.mark(fileId);
   $('#title').value = S.lastTitle = S.book.title; syncInspectorDoc(); updateHistBtns(); renderSheets(); renderOutliner(); requestAnimationFrame(applyZoomPref);
 }
 function renderSheets() {
@@ -311,7 +320,7 @@ async function save(force) {
     const doc = bookData(), name = MMIO.safeName(doc.title) + '.mindmap.json', D = Cloud.drive;
     if (!S.fileId) {
       if (!isAdmin() && S.maps.length >= S.me.perms.maxMaps) throw Object.assign(new Error('You have reached the limit of ' + S.me.perms.maxMaps + ' maps set by the administrator.'), { code: 'quota' });
-      const f = await D.create(S.folder.id, name, doc); S.fileId = f.id; S.modified = f.modifiedTime; thAfterSave(f.id, f.modifiedTime); S.maps.unshift({ id: f.id, name: f.name, modifiedTime: f.modifiedTime });
+      const f = await D.create(S.folder.id, name, doc); S.fileId = f.id; OPENED.mark(f.id); S.modified = f.modifiedTime; thAfterSave(f.id, f.modifiedTime); S.maps.unshift({ id: f.id, name: f.name, modifiedTime: f.modifiedTime });
     } else {
       if (!force && S.modified) {
         let m = null; try { m = await D.meta(S.fileId); } catch (e) { if (e.code === 404) { S.fileId = null; S.saving = false; return save(true); } throw e; }
@@ -464,11 +473,12 @@ function fillGrid(el, list, emptyHtml) {
   if (!list.length) { el.innerHTML = `<div class="empty">${emptyHtml}</div>`; return; } list.forEach(m => el.append(mapCard(m)));
 }
 function renderHome() {
-  fillGrid($('#hRecent'), S.maps.slice(0, 6), S.folder.id ? 'No maps yet. Click “Create new map” or pick a template.' : 'Google Drive is not linked. <button class="link" data-go="cloud">Link now →</button>');
+  fillGrid($('#hRecent'), sortMaps(S.maps, 'recent').slice(0, 6), S.folder.id ? 'No maps yet. Click “Create new map” or pick a template.' : 'Google Drive is not linked. <button class="link" data-go="cloud">Link now →</button>');
 }
 function renderMaps() {
   const q = $('#mQ').value.trim().toLowerCase();
-  fillGrid($('#mGrid'), S.maps.filter(m => !q || m.name.toLowerCase().includes(q)), S.maps.length ? 'No results.' : (S.folder.id ? 'There are no maps in this folder yet.<br>Click “＋ New map” or import from .xmind / PDF.' : 'Google Drive is not linked. <button class="link" data-go="cloud">Link now →</button>'));
+  $('#mSort').value = P.sort || 'modified';
+  fillGrid($('#mGrid'), sortMaps(S.maps.filter(m => !q || m.name.toLowerCase().includes(q)), P.sort || 'modified'), S.maps.length ? 'No results.' : (S.folder.id ? 'There are no maps in this folder yet.<br>Click “＋ New map” or import from .xmind / PDF.' : 'Google Drive is not linked. <button class="link" data-go="cloud">Link now →</button>'));
 }
 let tplCat = 'all';
 function renderTemplates() {
