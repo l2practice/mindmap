@@ -343,50 +343,65 @@ async function loadLibrary() {
 function refreshLists() { if (S.view === 'home') renderHome(); else if (S.view === 'maps') renderMaps(); }
 /* ---------- map thumbnails: drawn from the map itself, cached on this device ---------- */
 const COVER = '<svg viewBox="0 0 200 110" aria-hidden="true"><g fill="none" stroke-width="3.2" stroke-linecap="round"><path d="M100 55C84 45 72 32 54 29" stroke="#8b5cf6"/><path d="M100 55C118 44 132 30 150 30" stroke="#f59e0b"/><path d="M100 55C84 67 72 80 54 82" stroke="#0ea5e9"/><path d="M100 55C118 68 132 80 150 80" stroke="#ec4899"/></g><rect x="30" y="20" width="36" height="16" rx="8" fill="#c4b5fd"/><rect x="134" y="22" width="38" height="16" rx="8" fill="#fde68a"/><rect x="30" y="74" width="36" height="16" rx="8" fill="#7dd3fc"/><rect x="134" y="72" width="38" height="16" rx="8" fill="#f9a8d4"/><rect x="76" y="42" width="48" height="26" rx="13" fill="#7c5cf5"/><rect x="86" y="52" width="28" height="5" rx="2.5" fill="#fff" opacity=".85"/></svg>';
-const TH = { cache: null, q: [], busy: false, eng: null, fail: new Set(), last: {}, t: 0, W: 420, H: 240 };
-function thCache() { if (!TH.cache) { try { TH.cache = JSON.parse(lsGet('mm-thumbs') || '{}'); } catch (e) { TH.cache = {}; } } return TH.cache; }
-function thSave(id, mod, url) {
-  const c = thCache(); c[id] = { m: mod, u: url, t: Date.now() };
+const TH = { cache: null, q: [], busy: false, eng: null, fail: new Set(), last: {}, t: 0, W: 420, H: 240, KEY: 'mm-thumbs2' };
+try { localStorage.removeItem('mm-thumbs'); } catch (e) {}   // older thumbnails showed the whole map; they are rebuilt zoomed on the centre
+function thCache() { if (!TH.cache) { try { TH.cache = JSON.parse(lsGet(TH.KEY) || '{}'); } catch (e) { TH.cache = {}; } } return TH.cache; }
+function thSave(id, mod, url, empty) {
+  const c = thCache(); c[id] = { m: mod, u: url || '', e: empty ? 1 : 0, t: Date.now() };
   const keys = Object.keys(c); if (keys.length > 60) keys.sort((x, y) => c[x].t - c[y].t).slice(0, keys.length - 60).forEach(k => delete c[k]);
-  lsSet('mm-thumbs', JSON.stringify(c));
+  lsSet(TH.KEY, JSON.stringify(c));
 }
-async function thDraw(mm) {   // PNG of the sheet that is currently laid out -> small JPEG data URL
-  const blob = await mm.exportPNG(1.5), bmp = await createImageBitmap(blob), c = document.createElement('canvas'); c.width = TH.W; c.height = TH.H;
-  const x = c.getContext('2d'); x.fillStyle = mm.bgColor(); x.fillRect(0, 0, TH.W, TH.H);
-  const s = Math.min((TH.W - 20) / bmp.width, (TH.H - 20) / bmp.height, 1.1), w = bmp.width * s, h = bmp.height * s; x.drawImage(bmp, (TH.W - w) / 2, (TH.H - h) / 2, w, h);
-  return c.toDataURL('image/jpeg', 0.82);
+const bookEmpty = b => b.sheets.every(s => !s.root.children || !s.root.children.length);   // nothing but a central topic
+async function thDraw(mm) {
+  // Picture of the central part of the sheet: the main topic and its first-level branches, at a readable size.
+  const b = mm.bounds(), pad = 40, ex = pad + 20, ey = pad, w = Math.ceil(b.w + pad * 2 + 40);
+  const blob = await mm.exportPNG(2), bmp = await createImageBitmap(blob), s = bmp.width / w;       // px per world unit in the PNG
+  const R = mm.doc.root, set = [R].concat(R.collapsed ? [] : R.children);
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; set.forEach(n => { x0 = Math.min(x0, n._x); y0 = Math.min(y0, n._y); x1 = Math.max(x1, n._x + n._w); y1 = Math.max(y1, n._y + n._h); });
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, k = Math.max(0.55, Math.min(1.2, (TH.W - 28) / (x1 - x0), (TH.H - 28) / (y1 - y0)));
+  const c = document.createElement('canvas'); c.width = TH.W; c.height = TH.H; const x = c.getContext('2d');
+  x.fillStyle = mm.bgColor(); x.fillRect(0, 0, TH.W, TH.H);
+  x.drawImage(bmp, (b.x - ex - cx) * k + TH.W / 2, (b.y - ey - cy) * k + TH.H / 2, bmp.width * k / s, bmp.height * k / s);
+  return c.toDataURL('image/jpeg', 0.84);
 }
 function thEngine() {
   if (!TH.eng) { const el = document.createElement('div'); el.style.cssText = 'position:fixed;left:-20000px;top:0;width:1100px;height:700px;visibility:hidden;pointer-events:none'; document.body.append(el); TH.eng = new MindMap(el, { static: true }); TH.eng.readOnly = true; }
   return TH.eng;
 }
 async function thGenerate(m) {
-  const book = toBook(await Cloud.drive.read(m.id)), eng = thEngine(); eng.load(book.sheets[book.active]);
-  await new Promise(r => requestAnimationFrame(r)); return thDraw(eng);
+  const book = toBook(await Cloud.drive.read(m.id)); if (bookEmpty(book)) return { e: 1, u: '' };
+  const eng = thEngine(); eng.load(book.sheets[book.active]); await new Promise(r => requestAnimationFrame(r));
+  return { e: 0, u: await thDraw(eng) };
 }
-function thApply(id, url) { document.querySelectorAll('.card[data-id="' + id + '"] .thumb').forEach(t => { t.style.backgroundImage = 'url(' + url + ')'; t.classList.add('img'); }); }
+function thShow(el, hit) {
+  el.classList.toggle('empty', !!hit.e); el.querySelectorAll('.tbadge').forEach(x => x.remove());
+  if (hit.e) { const b = document.createElement('span'); b.className = 'tbadge'; b.textContent = 'Empty'; el.append(b); el.style.backgroundImage = el.dataset.grad || ''; el.classList.remove('img'); }
+  else { el.style.backgroundImage = 'url(' + hit.u + ')'; el.classList.add('img'); }
+}
+function thApply(id, hit) { document.querySelectorAll('.card[data-id="' + id + '"] .thumb').forEach(t => thShow(t, hit)); }
 async function thPump() {
   if (TH.busy) return; const m = TH.q.shift(); if (!m) return; TH.busy = true;
-  try { const url = await thGenerate(m); thSave(m.id, m.modifiedTime, url); thApply(m.id, url); } catch (e) { TH.fail.add(m.id + '|' + m.modifiedTime); }
+  try { const r = await thGenerate(m); thSave(m.id, m.modifiedTime, r.u, r.e); thApply(m.id, r); } catch (e) { TH.fail.add(m.id + '|' + m.modifiedTime); }
   TH.busy = false; setTimeout(thPump, 80);
 }
 function thWant(m, thumbEl) {
   const hit = thCache()[m.id];
-  if (hit && hit.m === m.modifiedTime) { thumbEl.style.backgroundImage = 'url(' + hit.u + ')'; thumbEl.classList.add('img'); return; }
+  if (hit && hit.m === m.modifiedTime) { thShow(thumbEl, hit); return; }
   const key = m.id + '|' + m.modifiedTime; if (TH.fail.has(key) || TH.q.some(q => q.id === m.id && q.modifiedTime === m.modifiedTime)) return;
   TH.q.push(m); thPump();
 }
 function thAfterSave(id, mod) {   // refresh the thumbnail of the map being edited (at most every 20 s)
   clearTimeout(TH.t); TH.t = setTimeout(async () => {
     if (S.view !== 'editor' || !S.mm || S.mm.editing || S.fileId !== id || Date.now() - (TH.last[id] || 0) < 20000) return;
-    TH.last[id] = Date.now(); try { thSave(id, mod, await thDraw(S.mm)); } catch (e) {}
+    TH.last[id] = Date.now();
+    try { if (bookEmpty(bookData())) thSave(id, mod, '', true); else thSave(id, mod, await thDraw(S.mm), false); } catch (e) {}
   }, 1500);
 }
-function thClear() { TH.cache = null; TH.q = []; TH.fail.clear(); try { localStorage.removeItem('mm-thumbs'); } catch (e) {} }
+function thClear() { TH.cache = null; TH.q = []; TH.fail.clear(); try { localStorage.removeItem(TH.KEY); } catch (e) {} }
 function mapCard(m) {
   const c = document.createElement('div'); c.className = 'card' + (m.id === S.fileId ? ' cur' : ''); c.tabIndex = 0;
   c.dataset.id = m.id;
-  c.innerHTML = `<div class="thumb" style="background-image:linear-gradient(135deg,${gradOf(m.id)})">${COVER}</div><div class="meta"><div class="nm">${esc(m.name.replace(/\.mindmap\.json$/, ''))}</div><small>${esc(fdate(m.modifiedTime))}</small></div><button class="x" title="Delete (moves to Drive trash)">🗑</button>`;
+  c.innerHTML = `<div class="thumb" data-grad="linear-gradient(135deg,${gradOf(m.id)})" style="background-image:linear-gradient(135deg,${gradOf(m.id)})">${COVER}</div><div class="meta"><div class="nm">${esc(m.name.replace(/\.mindmap\.json$/, ''))}</div><small>${esc(fdate(m.modifiedTime))}</small></div><button class="x" title="Delete (moves to Drive trash)">🗑</button>`;
   thWant(m, c.querySelector('.thumb'));
   c.onclick = e => { if (e.target.closest('.x')) return; openMap(m.id); };
   c.onkeydown = e => { if (e.key === 'Enter') openMap(m.id); };
