@@ -344,8 +344,8 @@ async function loadLibrary() {
 function refreshLists() { if (S.view === 'home') renderHome(); else if (S.view === 'maps') renderMaps(); }
 /* ---------- map thumbnails: drawn from the map itself, cached on this device ---------- */
 const COVER = '<svg viewBox="0 0 200 110" aria-hidden="true"><g fill="none" stroke-width="3.2" stroke-linecap="round"><path d="M100 55C84 45 72 32 54 29" stroke="#8b5cf6"/><path d="M100 55C118 44 132 30 150 30" stroke="#f59e0b"/><path d="M100 55C84 67 72 80 54 82" stroke="#0ea5e9"/><path d="M100 55C118 68 132 80 150 80" stroke="#ec4899"/></g><rect x="30" y="20" width="36" height="16" rx="8" fill="#c4b5fd"/><rect x="134" y="22" width="38" height="16" rx="8" fill="#fde68a"/><rect x="30" y="74" width="36" height="16" rx="8" fill="#7dd3fc"/><rect x="134" y="72" width="38" height="16" rx="8" fill="#f9a8d4"/><rect x="76" y="42" width="48" height="26" rx="13" fill="#7c5cf5"/><rect x="86" y="52" width="28" height="5" rx="2.5" fill="#fff" opacity=".85"/></svg>';
-const TH = { cache: null, q: [], busy: false, eng: null, fail: new Set(), last: {}, t: 0, W: 420, H: 240, KEY: 'mm-thumbs2' };
-try { localStorage.removeItem('mm-thumbs'); } catch (e) {}   // older thumbnails showed the whole map; they are rebuilt zoomed on the centre
+const TH = { cache: null, q: [], busy: false, eng: null, fail: new Set(), last: {}, t: 0, W: 420, H: 240, KEY: 'mm-thumbs3' };
+try { localStorage.removeItem('mm-thumbs'); localStorage.removeItem('mm-thumbs2'); } catch (e) {}   // older thumbnails were not centred on the main topic; they are rebuilt
 function thCache() { if (!TH.cache) { try { TH.cache = JSON.parse(lsGet(TH.KEY) || '{}'); } catch (e) { TH.cache = {}; } } return TH.cache; }
 function thSave(id, mod, url, empty) {
   const c = thCache(); c[id] = { m: mod, u: url || '', e: empty ? 1 : 0, t: Date.now() };
@@ -358,8 +358,9 @@ async function thDraw(mm) {
   const b = mm.bounds(), pad = 40, ex = pad + 20, ey = pad, w = Math.ceil(b.w + pad * 2 + 40);
   const blob = await mm.exportPNG(2), bmp = await createImageBitmap(blob), s = bmp.width / w;       // px per world unit in the PNG
   const R = mm.doc.root, set = [R].concat(R.collapsed ? [] : R.children);
-  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; set.forEach(n => { x0 = Math.min(x0, n._x); y0 = Math.min(y0, n._y); x1 = Math.max(x1, n._x + n._w); y1 = Math.max(y1, n._y + n._h); });
-  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, k = Math.max(0.55, Math.min(1.2, (TH.W - 28) / (x1 - x0), (TH.H - 28) / (y1 - y0)));
+  const cx = R._x + R._w / 2, cy = R._y + R._h / 2;      // the main topic is always the exact centre of the picture
+  let dx = R._w / 2, dy = R._h / 2; set.forEach(n => { dx = Math.max(dx, Math.abs(n._x - cx), Math.abs(n._x + n._w - cx)); dy = Math.max(dy, Math.abs(n._y - cy), Math.abs(n._y + n._h - cy)); });
+  const k = Math.max(0.55, Math.min(1.2, (TH.W / 2 - 14) / dx, (TH.H / 2 - 14) / dy));
   const c = document.createElement('canvas'); c.width = TH.W; c.height = TH.H; const x = c.getContext('2d');
   x.fillStyle = mm.bgColor(); x.fillRect(0, 0, TH.W, TH.H);
   x.drawImage(bmp, (b.x - ex - cx) * k + TH.W / 2, (b.y - ey - cy) * k + TH.H / 2, bmp.width * k / s, bmp.height * k / s);
