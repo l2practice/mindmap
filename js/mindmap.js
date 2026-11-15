@@ -307,14 +307,21 @@ class MindMap {
     this.drawLinks(); this.o.onLayout && this.o.onLayout();
   }
   layoutH(R, mode) {
-    const GY = 16, GX = 44, GX0 = 72;
+    const GY = 22, GX = 44, GX0 = 72;
     const kids = n => n.collapsed ? [] : n.children;
-    const ext = n => { const ks = kids(n); if (!ks.length) return n._ext = n._h; let s = GY * (ks.length - 1); ks.forEach(k => s += ext(k)); return n._ext = Math.max(n._h, s); };
     const dlt = n => { const st = this.sty.get(n.id); return st && st.bottom ? n._h / 2 : 0; };   // anchor offset below the box centre
+    const ext = n => {      // vertical room a subtree needs, including the small shift applied to underline-style children
+      const ks = kids(n); if (!ks.length) return n._ext = n._h;
+      let s = GY * (ks.length - 1); ks.forEach(k => s += ext(k));
+      const sh = Math.abs(dlt(n) - (dlt(ks[0]) + dlt(ks[ks.length - 1])) / 2);
+      return n._ext = Math.max(n._h, s + 2 * sh);
+    };
     const spread = (ks, pa) => {   // centres of child slots, shifted so the child anchors are symmetric about the parent anchor
       let tot = GY * (ks.length - 1); ks.forEach(k => tot += k._ext);
       let y = -tot / 2; const cc = ks.map(k => { const c = y + k._ext / 2; y += k._ext + GY; return c; });
-      const an = ks.map((k, i) => cc[i] + dlt(k)), shift = pa - (Math.min(...an) + Math.max(...an)) / 2;
+      // Keep the slot block centred on the parent (never move slots relative to each other, or neighbouring subtrees overlap);
+      // only compensate for underline nodes whose connector sits at their bottom edge.
+      const shift = pa - (dlt(ks[0]) + dlt(ks[ks.length - 1])) / 2;
       return cc.map(c => c + shift);
     };
     const place = (n, edge, yc, dir) => {

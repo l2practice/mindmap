@@ -153,6 +153,8 @@ function initEditor() {
     onContext: (id, x, y) => contextMenu(id, x, y)
   });
   applyAppTheme();
+  // The layout is measured from rendered text, so re-measure once the web font has really loaded (otherwise boxes keep fallback-font widths)
+  if (document.fonts) { const again = () => { if (S.mm && S.view === 'editor') S.mm.relayout(); }; document.fonts.addEventListener('loadingdone', again); document.fonts.ready.then(again); }
   $('#title').addEventListener('input', e => {
     const v = e.target.value, mm = S.mm, r = mm.doc.root;
     if (r.text === S.lastTitle && !r.html && mm.index.size === 1) { mm.setRootText(v); mm.render(); }
