@@ -103,7 +103,8 @@ function route(me) {
 function start(me) {
   S.me = me; S.folder = { id: me.folderId || '', name: me.folderName || '' }; S.binId = null;
   $('#gate').hidden = true; $('#app').hidden = false;
-  const av = (S.user && S.user.picture) || 'icon.svg';
+  const nm = ((S.user && (S.user.name || S.user.email)) || '?').trim(), hue = [...nm].reduce((x, ch) => (x * 31 + ch.charCodeAt(0)) % 360, 7);
+  const av = (S.user && S.user.picture) || 'data:image/svg+xml,' + encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="hsl(${hue},55%,45%)"/><text x="32" y="42" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="#fff" text-anchor="middle">${esc(nm[0].toUpperCase())}</text></svg>`);
   $('#ucAvatar').src = av; $('#eAvatar').src = av; $('#ucName').textContent = (S.user && S.user.name) || ''; $('#ucMail').textContent = (S.user && S.user.email) || '';
   $('#navAdmin').hidden = !isAdmin();
   if (!S.mm) { initShell(); initEditor(); initInspector(); initSearch(); initMini(); initAI(); }

@@ -8,14 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400..700&display=swap">
-<link rel="stylesheet" href="style.css?v=20261115d">
+<link rel="stylesheet" href="style.css?v=20261115e">
 </head>
 <body>
 
 <!-- Trang giới thiệu + đăng nhập / đăng ký / chờ duyệt -->
 <div id="gate" class="gate">
   <header class="g-nav">
-    <div class="g-logo"><img src="logo.svg" alt=""><span>Mind <b>Map</b></span></div>
+    <div class="g-logo"><i data-logo></i><span>Mind <b>Map</b></span></div>
     <nav class="g-links"><button data-demo>Create</button><button data-demo>Organize</button><button data-demo>Visualize</button><button data-demo>Share</button></nav>
     <button class="g-login" id="gNavLogin">Log in</button>
   </header>
@@ -37,7 +37,7 @@
   </main>
 
   <section class="g-card" id="loginCard" hidden>
-    <img class="lc-logo" src="logo.svg" alt="">
+    <i class="lc-logo" data-logo></i>
     <div class="lc-title">Mind <b>Map</b></div>
     <p class="lc-sub">Create, organize and develop ideas with mind maps</p>
     <button class="lc-google" id="gGoogle" type="button"></button>
@@ -51,7 +51,7 @@
   </section>
 
   <section class="g-card" id="stateCard" hidden>
-    <img class="lc-logo" src="logo.svg" alt="">
+    <i class="lc-logo" data-logo></i>
     <div class="lc-title">Mind <b>Map</b></div>
     <div id="gate-body"></div>
   </section>
@@ -61,7 +61,7 @@
 
   <!-- ============ Thanh bên + các trang ============ -->
   <aside class="side" id="side">
-    <div class="brand"><img src="icon.svg" alt=""><span>Mind Map</span><button class="ib theme-btn" data-theme-toggle title="Switch light / dark mode"></button></div>
+    <div class="brand"><i data-logo></i><span>Mind Map</span><button class="ib theme-btn" data-theme-toggle title="Switch light / dark mode"></button></div>
     <nav id="nav">
       <button data-go="home"><i data-ic="home"></i>Home</button>
       <button data-go="maps"><i data-ic="library"></i>My maps</button>
@@ -298,13 +298,13 @@
 <input type="file" id="fileIn" hidden accept=".xmind,.pdf,.md,.txt,.json,.markdown">
 <div id="toast"></div>
 
-<script src="config.js?v=20261115d"></script>
-<script src="js/mindmap.js?v=20261115d"></script>
-<script src="js/icons.js?v=20261115d"></script>
-<script src="js/ai.js?v=20261115d"></script>
-<script src="js/templates.js?v=20261115d"></script>
-<script src="js/io.js?v=20261115d"></script>
-<script src="js/cloud.js?v=20261115d"></script>
-<script src="js/app.js?v=20261115d"></script>
+<script src="config.js?v=20261115e"></script>
+<script src="js/mindmap.js?v=20261115e"></script>
+<script src="js/icons.js?v=20261115e"></script>
+<script src="js/ai.js?v=20261115e"></script>
+<script src="js/templates.js?v=20261115e"></script>
+<script src="js/io.js?v=20261115e"></script>
+<script src="js/cloud.js?v=20261115e"></script>
+<script src="js/app.js?v=20261115e"></script>
 </body>
 </html>

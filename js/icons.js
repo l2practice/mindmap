@@ -7,9 +7,11 @@ function svg(name, cls) {
   const fill = i.f ? 'fill="currentColor" stroke="none"' : 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
   return '<svg class="ico' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" ' + fill + ' aria-hidden="true" focusable="false">' + i.p + '</svg>';
 }
-function hydrate(root) {   // <i data-ic="home"></i> -> inline svg
+const LOGO = '<svg class="lg" viewBox="0 0 64 64" aria-hidden="true"><path class="lg-ink" d="M32 33L12 14M32 33L51 12M32 33L55 39M32 33L12 49M32 33L38 56" fill="none" stroke-width="3.4" stroke-linecap="round"/><g class="lg-ink" stroke-width="3.2"><circle cx="12" cy="14" r="6.3" fill="#ffc933"/><circle cx="51" cy="12" r="6.3" fill="#ff5d5d"/><circle cx="55" cy="39" r="6.3" fill="#2fd07a"/><circle cx="12" cy="49" r="6.3" fill="#7c5cf5"/><circle cx="38" cy="56" r="6.3" fill="#ff62a8"/><circle cx="32" cy="33" r="11.5" fill="#4fb3ff"/></g></svg>';
+function hydrate(root) {   // <i data-ic="home"></i> -> inline svg ; <i data-logo></i> -> the app logo
   (root || document).querySelectorAll('[data-ic]').forEach(el => { if (!el.firstElementChild) el.innerHTML = svg(el.dataset.ic); });
+  (root || document).querySelectorAll('[data-logo]').forEach(el => { if (!el.firstElementChild) el.innerHTML = LOGO; });
 }
-g.MMIcons = { svg, hydrate, names: Object.keys(ICONS) };
+g.MMIcons = { svg, hydrate, logo: LOGO, names: Object.keys(ICONS) };
 document.addEventListener('DOMContentLoaded', () => hydrate());
 })(window);
