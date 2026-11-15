@@ -118,7 +118,7 @@ input:focus,select:focus,textarea:focus{border-color:var(--accent2);box-shadow:0
 .scrim{display:none}
 .pages{flex:1;min-width:0;overflow:auto;position:relative}
 .page{display:none;padding:26px 34px 60px;max-width:1180px;margin:0 auto}
-#app[data-view=home] #v-home,#app[data-view=maps] #v-maps,#app[data-view=templates] #v-templates,#app[data-view=cloud] #v-cloud,#app[data-view=settings] #v-settings,#app[data-view=admin] #v-admin{display:block}
+#app[data-view=home] #v-home,#app[data-view=maps] #v-maps,#app[data-view=templates] #v-templates,#app[data-view=bin] #v-bin,#app[data-view=cloud] #v-cloud,#app[data-view=settings] #v-settings,#app[data-view=admin] #v-admin{display:block}
 #app[data-view=editor] .side,#app[data-view=editor] .pages{display:none}
 .ph{display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap}
 .ph h1{margin:0;font-size:26px;flex:1;min-width:120px}
@@ -461,3 +461,10 @@ input[type=password]:focus{border-color:var(--accent2);box-shadow:0 0 0 3px var(
 .card .thumb{position:relative}
 .card .thumb .tbadge{position:absolute;left:8px;top:8px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.02em;background:rgba(255,255,255,.88);color:#6b6f8d;border:1px solid rgba(120,120,160,.25)}
 [data-theme=dark] .card .thumb .tbadge{background:rgba(20,20,36,.8);color:#c9cbe8}
+
+/* ---------- recycle bin ---------- */
+.banner{margin:0 0 18px;padding:12px 16px;border-radius:12px;background:var(--accent-soft);color:var(--text);line-height:1.5}
+.card.bin{cursor:default}.card.bin:hover{transform:none;box-shadow:none}
+.card.bin .thumb svg{filter:grayscale(1);opacity:.55}
+.card .thumb .tbadge.warn{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+.binact{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}

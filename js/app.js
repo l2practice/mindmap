@@ -101,7 +101,7 @@ function route(me) {
 
 /* ---------- start ---------- */
 function start(me) {
-  S.me = me; S.folder = { id: me.folderId || '', name: me.folderName || '' };
+  S.me = me; S.folder = { id: me.folderId || '', name: me.folderName || '' }; S.binId = null;
   $('#gate').hidden = true; $('#app').hidden = false;
   const av = (S.user && S.user.picture) || 'icon.svg';
   $('#ucAvatar').src = av; $('#eAvatar').src = av; $('#ucName').textContent = (S.user && S.user.name) || ''; $('#ucMail').textContent = (S.user && S.user.email) || '';
@@ -123,7 +123,7 @@ function go(v) {
   S.view = v; const app = $('#app'); app.dataset.view = v; app.classList.remove('menu-open');
   $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.go === v));
   $('#v-editor').hidden = v !== 'editor'; $('#pages').scrollTop = 0;
-  const r = { home: renderHome, maps: renderMaps, templates: renderTemplates, cloud: renderCloud, settings: renderSettings, admin: renderAdmin }[v]; if (r) r();
+  const r = { home: renderHome, maps: renderMaps, templates: renderTemplates, bin: renderBin, cloud: renderCloud, settings: renderSettings, admin: renderAdmin }[v]; if (r) r();
   if (v === 'editor' && S.mm) S.mm.render();
 }
 function initShell() {
@@ -134,7 +134,7 @@ function initShell() {
   $('#hNew').onclick = () => newMap(); $('#mNew').onclick = () => newMap(); $('#hTpl').onclick = () => go('templates');
   $('#hImport').onclick = () => pickFile('.xmind,.pdf,.md,.markdown,.txt,.json'); $('#mImport').onclick = () => pickFile('.xmind,.pdf,.md,.markdown,.txt,.json');
   $('#mRef').onclick = async () => { await loadLibrary(); toast('List reloaded'); }; $('#mQ').oninput = renderMaps; $('#tQ').oninput = renderTemplates;
-  $('#adRef').onclick = renderAdmin;
+  $('#adRef').onclick = renderAdmin; $('#binRef').onclick = renderBin;
   $('#fileIn').onchange = e => { const f = e.target.files[0]; e.target.value = ''; if (f) doImport(f); };
   window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
   // drag & drop a file anywhere
@@ -338,7 +338,7 @@ async function loadLibrary() {
   if (!S.folder.id) { S.maps = []; S.mapsLoading = false; refreshLists(); return; }
   S.mapsLoading = true; refreshLists();
   try { S.maps = await Cloud.drive.list(S.folder.id); } catch (e) { toast('Could not load the map list: ' + errMsg(e), true); }
-  S.mapsLoading = false; refreshLists();
+  S.mapsLoading = false; refreshLists(); purgeBin(false);
 }
 function refreshLists() { if (S.view === 'home') renderHome(); else if (S.view === 'maps') renderMaps(); }
 /* ---------- map thumbnails: drawn from the map itself, cached on this device ---------- */
@@ -406,10 +406,56 @@ function mapCard(m) {
   c.onclick = e => { if (e.target.closest('.x')) return; openMap(m.id); };
   c.onkeydown = e => { if (e.key === 'Enter') openMap(m.id); };
   c.querySelector('.x').onclick = async () => {
-    if (!confirm('Move "' + m.name.replace(/\.mindmap\.json$/, '') + '" to the Google Drive trash?')) return;
-    try { await Cloud.drive.trash(m.id); S.maps = S.maps.filter(x => x.id !== m.id); if (m.id === S.fileId) { S.fileId = null; S.dirty = false; lsDel('mm-draft'); } refreshLists(); toast('Deleted'); } catch (e) { toast(errMsg(e), true); }
+    if (!confirm('Move "' + m.name.replace(/\.mindmap\.json$/, '') + '" to the Recycle Bin?\nYou can restore it for 90 days, after that it is deleted permanently.')) return;
+    try { await Cloud.drive.moveToBin(m.id, S.folder.id, await getBin(true)); S.maps = S.maps.filter(x => x.id !== m.id); if (m.id === S.fileId) { S.fileId = null; S.dirty = false; lsDel('mm-draft'); } refreshLists(); toast('Moved to the Recycle Bin (kept for 90 days)'); } catch (e) { toast(errMsg(e), true); }
   };
   return c;
+}
+/* ---------- Recycle Bin (90 days) ---------- */
+const BIN_DAYS = 90, DAY = 86400000;
+async function getBin(create) {
+  if (S.binId) return S.binId; if (!S.folder.id) return null;
+  let id = await Cloud.drive.findBin(S.folder.id); if (!id && create) id = (await Cloud.drive.createFolder('Recycle Bin', S.folder.id)).id;
+  return (S.binId = id || null);
+}
+const binAge = f => Number(f.appProperties && f.appProperties.deletedAt) || Date.parse(f.modifiedTime) || Date.now();   // when it was deleted
+async function purgeBin(force) {      // permanently delete what has been in the bin for more than 90 days (runs whenever the app is opened)
+  if (!S.folder.id) return 0; const key = 'mm-purge:' + S.folder.id;
+  if (!force && Date.now() - (+lsGet(key) || 0) < 6 * 3600 * 1000) return 0;
+  try {
+    const bin = await getBin(false); if (!bin) { lsSet(key, Date.now()); return 0; }
+    let n = 0; for (const f of await Cloud.drive.listBin(bin)) if (Date.now() - binAge(f) > BIN_DAYS * DAY) { await Cloud.drive.remove(f.id); n++; }
+    lsSet(key, Date.now()); if (n) toast(n + ' map' + (n > 1 ? 's' : '') + ' older than 90 days ' + (n > 1 ? 'were' : 'was') + ' removed from the Recycle Bin');
+    return n;
+  } catch (e) { return 0; }
+}
+function binCard(f) {
+  const age = binAge(f), left = Math.max(0, Math.ceil((age + BIN_DAYS * DAY - Date.now()) / DAY)), nm = f.name.replace(/\.mindmap\.json$/, '');
+  const c = document.createElement('div'); c.className = 'card bin'; c.dataset.id = f.id;
+  c.innerHTML = `<div class="thumb" style="background-image:linear-gradient(135deg,#e5e7eb,#f3f4f6)">${COVER}<span class="tbadge ${left <= 7 ? 'warn' : ''}">${left} day${left === 1 ? '' : 's'} left</span></div>
+    <div class="meta"><div class="nm" title="${esc(nm)}">${esc(nm)}</div><small>Deleted ${esc(fdate(age))}</small>
+    <div class="binact"><button class="btn small" data-a="restore">Restore</button><button class="btn small danger" data-a="del">Delete forever</button></div></div>`;
+  c.querySelector('[data-a=restore]').onclick = async e => {
+    if (!isAdmin() && S.maps.length >= S.me.perms.maxMaps) return toast('You have reached the limit of ' + S.me.perms.maxMaps + ' maps set by the administrator.', true);
+    e.target.disabled = true; try { await Cloud.drive.restore(f.id, S.folder.id, await getBin(false)); toast('Restored “' + nm + '” to My maps'); await loadLibrary(); renderBin(); } catch (x) { toast(errMsg(x), true); e.target.disabled = false; }
+  };
+  c.querySelector('[data-a=del]').onclick = async e => {
+    if (!confirm('Delete "' + nm + '" forever? This cannot be undone.')) return;
+    e.target.disabled = true; try { await Cloud.drive.remove(f.id); toast('Deleted forever'); renderBin(); } catch (x) { toast(errMsg(x), true); e.target.disabled = false; }
+  };
+  return c;
+}
+async function renderBin() {
+  const el = $('#binGrid'); if (!el) return;
+  if (!S.folder.id) { el.innerHTML = '<div class="empty">Google Drive is not linked. <button class="link" data-go="cloud">Link now →</button></div>'; return; }
+  el.innerHTML = '<div class="empty"><span class="spin"></span> Loading…</div>';
+  let files = [];
+  try { await purgeBin(true); const bin = await getBin(false); files = bin ? await Cloud.drive.listBin(bin) : []; }
+  catch (e) { el.innerHTML = '<div class="empty">Could not load the Recycle Bin.<br>' + esc(errMsg(e)) + '</div>'; return; }
+  if (S.view !== 'bin') return;
+  files.sort((x, y) => binAge(y) - binAge(x)); el.innerHTML = '';
+  if (!files.length) { el.innerHTML = '<div class="empty">The Recycle Bin is empty.<br>Maps you delete stay here for 90 days before they are removed for good.</div>'; return; }
+  files.forEach(f => el.append(binCard(f)));
 }
 function fillGrid(el, list, emptyHtml) {
   el.innerHTML = ''; if (S.mapsLoading && !list.length) { el.innerHTML = '<div class="empty"><span class="spin"></span> Loading…</div>'; return; }
@@ -652,7 +698,7 @@ function renderCloud() {
   const show = () => { $('#clFolder').innerHTML = S.folder.id ? `📁 <b>${esc(S.folder.name || 'Folder')}</b> · <a href="https://drive.google.com/drive/folders/${encodeURIComponent(S.folder.id)}" target="_blank" rel="noopener">open in Drive</a> · ${S.maps.length} maps` : '<span class="badge wait">Not linked</span> Maps are only saved as a local draft on this device.'; };
   show(); const err = t => { $('#clErr').textContent = t || ''; };
   const link = async (id, name) => {
-    try { const r = await Cloud.gas('saveSettings', { folderId: id, folderName: name }); S.me = Object.assign(S.me, r.me); S.folder = { id, name }; updateUserCard(); err(''); toast('Linked folder "' + name + '"'); await loadLibrary(); show(); if (S.dirty) schedule(300); }
+    try { const r = await Cloud.gas('saveSettings', { folderId: id, folderName: name }); S.me = Object.assign(S.me, r.me); S.folder = { id, name }; S.binId = null; updateUserCard(); err(''); toast('Linked folder "' + name + '"'); await loadLibrary(); show(); if (S.dirty) schedule(300); }
     catch (e) { err(errMsg(e)); }
   };
   $('#clRenew').onclick = async () => { try { await Cloud.refresh(); toast('Drive connection is working'); } catch (e) { toast('Connection problem: ' + errMsg(e), true); } };

@@ -75,3 +75,9 @@ window.MM_CONFIG = {
 ## Nhiều sheet và Outliner
 * Một tệp sơ đồ có thể chứa nhiều **sheet** (thanh tab ở đáy editor: bấm để mở, bấm đúp để đổi tên, chuột phải để nhân đôi/xoá, dấu ＋ để thêm). Tệp XMind nhiều sheet được nhập thành một tệp nhiều sheet, và xuất `.xmind`/Markdown/JSON gồm tất cả sheet. Tệp cũ (một sơ đồ) tự mở như một tệp 1 sheet.
 * **Outliner** (nút ở góc phải thanh đáy): xem và sửa sơ đồ dưới dạng danh sách thụt lề. Enter: thêm chủ đề; Tab / Shift+Tab: thụt vào / ra; Backspace trên dòng trống: xoá; ↑ ↓: di chuyển.
+
+
+## Recycle Bin (thùng rác 90 ngày)
+* Xoá một sơ đồ trong **My maps** không xoá hẳn: nó được chuyển vào thư mục con **Recycle Bin** nằm trong thư mục Drive đã liên kết, kèm ngày xoá. Mục **Recycle Bin** ở thanh bên cho xem ngày còn lại, **Restore** (khôi phục) hoặc **Delete forever** (xoá hẳn ngay).
+* Sau **90 ngày** sơ đồ bị **xoá vĩnh viễn tự động**. Việc dọn này do trình duyệt thực hiện mỗi khi người dùng mở ứng dụng (tối đa 6 giờ một lần) hoặc mở trang Recycle Bin; không có tác vụ chạy nền ở máy chủ, nên nếu không ai mở ứng dụng thì tệp quá hạn vẫn nằm đó cho tới lần mở tiếp theo.
+* Thùng rác riêng này dùng thay cho thùng rác của Google Drive vì Drive tự dọn thùng rác sau 30 ngày và không chỉnh được. Tệp trong Recycle Bin vẫn chiếm dung lượng Drive của người dùng. Nếu người dùng đổi sang thư mục Drive khác thì thùng rác của thư mục cũ chỉ được dọn khi họ liên kết lại thư mục đó.

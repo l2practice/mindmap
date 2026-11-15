@@ -110,7 +110,7 @@ const drive = {
   async list(folderId) {
     const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and name contains '.mindmap.json'`);
     const r = await dfetch(`${D}?q=${q}&orderBy=modifiedTime desc&pageSize=500&fields=files(id,name,modifiedTime)`);
-    return (await r.json()).files || [];
+    return ((await r.json()).files || []).filter(f => /\.mindmap\.json$/.test(f.name));   // never list sub-folders such as the Recycle Bin
   },
   async read(id) { return (await dfetch(`${D}/${id}?alt=media`)).json(); },
   async meta(id) { return (await dfetch(`${D}/${id}?fields=id,name,mimeType,modifiedTime,trashed,capabilities(canAddChildren,canEdit)`)).json(); },
@@ -123,7 +123,27 @@ const drive = {
     return (await dfetch(`${U}/${id}?uploadType=multipart&fields=id,name,modifiedTime`, { method: 'PATCH', headers: { 'Content-Type': m.type }, body: m.body })).json();
   },
   async trash(id) { await dfetch(`${D}/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ trashed: true }) }); },
-  async createFolder(name) { return (await dfetch(`${D}?fields=id,name`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, mimeType: FOLDER }) })).json(); },
+  async createFolder(name, parent) {
+    const body = { name, mimeType: FOLDER }; if (parent) body.parents = [parent];
+    return (await dfetch(`${D}?fields=id,name`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json();
+  },
+  /* Recycle Bin = a sub-folder of the linked folder. Drive's own trash empties itself after 30 days, so the app keeps its own 90-day bin. */
+  async findBin(parent) {
+    const q = encodeURIComponent(`name='Recycle Bin' and mimeType='${FOLDER}' and '${parent}' in parents and trashed=false`);
+    const f = (((await (await dfetch(`${D}?q=${q}&pageSize=10&fields=files(id,name,mimeType)`)).json()).files) || []).find(x => x.mimeType === FOLDER && x.name === 'Recycle Bin');
+    return f ? f.id : null;
+  },
+  async listBin(bin) {
+    const q = encodeURIComponent(`'${bin}' in parents and trashed=false`);
+    return (((await (await dfetch(`${D}?q=${q}&pageSize=500&fields=files(id,name,modifiedTime,mimeType,appProperties)`)).json()).files) || []).filter(f => f.mimeType !== FOLDER);
+  },
+  async moveToBin(id, parent, bin) {
+    await dfetch(`${D}/${id}?addParents=${bin}&removeParents=${parent}&fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties: { deletedAt: String(Date.now()) } }) });
+  },
+  async restore(id, parent, bin) {
+    await dfetch(`${D}/${id}?addParents=${parent}&removeParents=${bin}&fields=id`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appProperties: { deletedAt: null } }) });
+  },
+  async remove(id) { await dfetch(`${D}/${id}`, { method: 'DELETE' }); },
   folderIdFrom(s) {
     s = String(s || '').trim(); let m = s.match(/\/folders\/([\w-]{10,})/) || s.match(/[?&]id=([\w-]{10,})/);
     if (m) return m[1]; return /^[\w-]{10,}$/.test(s) ? s : '';
