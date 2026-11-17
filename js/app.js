@@ -586,7 +586,7 @@ function contextMenu(id, x, y) {
   ], x, y);
 }
 function showShortcuts() {
-  modal('Shortcuts', `<div class="kbd">${[['Subtopic', 'Tab'], ['Sibling', 'Enter'], ['Sibling (above)', 'Shift+Enter'], ['Insert parent topic', 'Ctrl+Enter'], ['Edit text', 'F2 / Space / double-click'], ['Delete topic', 'Delete'], ['Fold / unfold topic', 'Ctrl+/'], ['Move selection', 'Arrow keys'], ['Select all', 'Ctrl+A'], ['Bold / italic / underline', 'Ctrl+B / I / U'], ['Undo / redo', 'Ctrl+Z / Ctrl+Y'], ['Copy / paste topics', 'Ctrl+C / Ctrl+V'], ['Search', 'Ctrl+F'], ['Save now', 'Ctrl+S'], ['Zoom', 'Ctrl + scroll / + / −'], ['Fit to screen', 'Ctrl+0']].map(([a, b]) => `<div><span>${a}</span><kbd>${b}</kbd></div>`).join('')}</div>
+  modal('Shortcuts', `<div class="kbd">${[['Subtopic', 'Tab'], ['Sibling', 'Enter'], ['Sibling (above)', 'Shift+Enter'], ['Insert parent topic', 'Ctrl+Enter'], ['Edit text', 'F2 / Space / double-click'], ['Edit one word / whole text', 'Double-click a word / again'], ['Delete topic', 'Delete'], ['Fold / unfold topic', 'Ctrl+/'], ['Move selection', 'Arrow keys'], ['Select all', 'Ctrl+A'], ['Bold / italic / underline', 'Ctrl+B / I / U'], ['Undo / redo', 'Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z)'], ['Duplicate topic', 'Ctrl+D'], ['Copy / paste topics', 'Ctrl+C / Ctrl+V'], ['Search', 'Ctrl+F'], ['Save now', 'Ctrl+S'], ['Zoom', 'Ctrl + scroll / + / −'], ['Fit to screen', 'Ctrl+0']].map(([a, b]) => `<div><span>${a}</span><kbd>${b}</kbd></div>`).join('')}</div>
     <div class="help" style="margin-top:14px">Drag a topic onto another topic to move it there (drop on the top/bottom edge to make it a sibling). Hold Shift or Ctrl while clicking to select several topics and drag them together.</div>`);
 }
 

@@ -483,7 +483,16 @@ class MindMap {
     vp.addEventListener('wheel', e => this.wheel(e), { passive: false });
     vp.addEventListener('dblclick', e => {
       if (this.readOnly) return;
-      const el = e.target.closest('.node'); if (el && !e.target.closest('.fold') && !e.target.closest('a')) this.startEdit(el.dataset.id, false);
+      const el = e.target.closest('.node'); if (!el || e.target.closest('.fold,.addb,a')) return; const id = el.dataset.id;
+      if (this.editing && this.editing.id === id) {   // second double-click on the same word -> the whole topic text
+        const t = this.editing.t, s = getSelection(), w = s.toString().trim();
+        if (w && this.dblWord && this.dblWord.id === id && this.dblWord.w === w) { const r = document.createRange(); r.selectNodeContents(t); s.removeAllRanges(); s.addRange(r); this.dblWord = null; }
+        else if (w) this.dblWord = { id, w };
+        return;
+      }
+      const t = el.querySelector('.t'), hit = t && this.wordAt(t, e.clientX, e.clientY);   // double-click on a word: edit it, with that word selected
+      this.startEdit(id, false);
+      if (hit && this.editing && this.editing.t === t) { const s = getSelection(); s.removeAllRanges(); s.addRange(hit); this.dblWord = { id, w: hit.toString().trim() }; }
     });
     vp.addEventListener('contextmenu', e => {
       e.preventDefault(); if (this.readOnly) return; const el = e.target.closest('.node');
@@ -496,6 +505,17 @@ class MindMap {
     document.addEventListener('cut', e => this.onCopy(e, true));
     document.addEventListener('paste', e => this.onPaste(e));
     window.addEventListener('resize', () => this.editing && this.posFmt());
+  }
+  wordAt(t, x, y) {   // range of the word under a screen point inside element t
+    let n, off;
+    if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(x, y); if (p) { n = p.offsetNode; off = p.offset; } }
+    else if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(x, y); if (r) { n = r.startContainer; off = r.startOffset; } }
+    if (!n || n.nodeType !== 3 || !t.contains(n)) return null;
+    const isW = c => /[\p{L}\p{N}_]/u.test(c || ''), tx = n.data; let a = Math.min(off, tx.length), b = a;
+    if (!isW(tx[a]) && isW(tx[a - 1])) { a--; b = a; }   // caret sits right after a word
+    if (!isW(tx[a])) return null;
+    while (a > 0 && isW(tx[a - 1])) a--; while (b < tx.length && isW(tx[b])) b++;
+    const r = document.createRange(); r.setStart(n, a); r.setEnd(n, b); return r;
   }
   pdown(e) {
     if (this.painter && !this.readOnly) {   // format painter: clicking another topic pastes the copied format onto it
@@ -613,12 +633,15 @@ class MindMap {
   onKey(e) {
     if (this.o.isBlocked && this.o.isBlocked()) return;
     const tg = e.target;
-    if (tg.closest && tg.closest('input,textarea,select,button,[contenteditable="true"],[contenteditable="plaintext-only"]')) return;
+    if (tg.closest && tg.closest('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]')) return;
+    const mod = e.ctrlKey || e.metaKey;
+    if (tg.closest && tg.closest('button') && !mod) return;   // plain keys belong to the focused button; Ctrl shortcuts (undo, copy…) still work after clicking a toolbar icon
     if (e.isComposing || e.keyCode === 229) return;
-    const mod = e.ctrlKey || e.metaKey, k = e.key, kl = k.length === 1 ? k.toLowerCase() : k; let h = true;
+    const k = e.key, kl = k.length === 1 ? k.toLowerCase() : k; let h = true;
     if (mod) {
       if (kl === 'z') e.shiftKey ? this.redo() : this.undo();
       else if (kl === 'y') this.redo();
+      else if (kl === 'd') this.duplicate();
       else if (kl === 'a') this.selectAll();
       else if (kl === 'b') this.toggleStyle('bold');
       else if (kl === 'i') this.toggleStyle('italic');
@@ -863,6 +886,11 @@ class MindMap {
     if (first) { const sib = first.p.children; const i = sib.indexOf(first.n); next = (sib[i + 1] || sib[i - 1] || first.p).id; }
     nodes.forEach(n => { const p = this.index.get(n.id).p; const i = p.children.indexOf(n); if (i >= 0) p.children.splice(i, 1); });
     this.commit(); this.select(next);
+  }
+  duplicate() {   // Ctrl+D: copy of the selected topics (with their subtopics) right after the originals
+    const nodes = this.selNodes().filter(n => this.index.get(n.id).p); if (!nodes.length) return; const made = [];
+    nodes.forEach(n => { const info = this.index.get(n.id), c = this.fresh(JSON.parse(JSON.stringify(n))); info.p.children.splice(info.p.children.indexOf(n) + 1, 0, c); made.push(c); });
+    this.commit(); this.select(made[0].id); made.slice(1).forEach(c => this.sel.add(c.id)); this.paintSel(); this.o.onSelect && this.o.onSelect();
   }
   toggleCollapse(ids) {
     ids = ids || [...this.sel]; let any = false;
