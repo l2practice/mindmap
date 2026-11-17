@@ -199,7 +199,11 @@ class MindMap {
     this.layer = $('div', 'mm-nodes');
     this.stage.append(this.svg, this.layer); this.vp.append(this.stage); host.append(this.vp);
     this.fmt = $('div'); this.fmt.hidden = true;
-    if (!o.static) this.buildFmt();
+    if (!o.static) {
+      this.buildFmt();
+      document.addEventListener('selectionchange', () => this.editing && this.syncFmt());
+      document.addEventListener('mouseup', e => this.painterUp(e));
+    }
     this.bind();
     this.load(MindMap.blank());
   }
@@ -494,6 +498,10 @@ class MindMap {
     window.addEventListener('resize', () => this.editing && this.posFmt());
   }
   pdown(e) {
+    if (this.painter && !this.readOnly) {   // format painter: clicking another topic pastes the copied format onto it
+      const nel = e.target.closest('.node');
+      if (nel && !(this.editing && this.editing.id === nel.dataset.id)) { e.preventDefault(); e.stopPropagation(); this.paintTo(nel.dataset.id); return; }
+    }
     if (this.editing && e.target.closest('.t') && e.target.closest('.t').isContentEditable) return;
     if (this.editing) this.endEdit(true);
     this.vp.focus({ preventScroll: true });
@@ -628,7 +636,7 @@ class MindMap {
       case 'Delete': case 'Backspace': this.remove(); break;
       case 'F2': case ' ': this.startEdit(this.primary, true); break;
       case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': this.nav(k, e.shiftKey); break;
-      case 'Escape': this.clearSel(); break;
+      case 'Escape': this.painter ? this.cancelPainter() : this.clearSel(); break;
       default: h = false;
     }
     if (h) e.preventDefault();
@@ -660,7 +668,7 @@ class MindMap {
       if (e.isComposing || e.keyCode === 229) return; e.stopPropagation();
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.endEdit(true); this.vp.focus({ preventScroll: true }); }
       else if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); }
-      else if (e.key === 'Escape') { e.preventDefault(); this.endEdit(false); this.vp.focus({ preventScroll: true }); }
+      else if (e.key === 'Escape') { e.preventDefault(); this.cancelPainter(); this.endEdit(false); this.vp.focus({ preventScroll: true }); }
       else if (e.key === 'Tab') { e.preventDefault(); this.endEdit(true); this.addChild(); }
     };
     t.onpaste = e => { e.preventDefault(); const tx = (e.clipboardData || window.clipboardData).getData('text/plain'); document.execCommand('insertText', false, tx.replace(/\r?\n/g, ' ')); };
@@ -694,10 +702,11 @@ class MindMap {
     const f = this.fmt = $('div', 'mm-fmt'); f.hidden = true; document.body.append(f);
     const keep = e => e.preventDefault();
     const btn = (html, title, fn, cls) => { const b = $('button', 'fb ' + (cls || ''), html); b.type = 'button'; b.title = title; b.onmousedown = keep; b.onclick = fn; f.append(b); return b; };
-    btn('<b>B</b>', 'Bold (Ctrl+B)', () => this.exec('bold'));
-    btn('<i>I</i>', 'Italic (Ctrl+I)', () => this.exec('italic'));
-    btn('<u>U</u>', 'Underline (Ctrl+U)', () => this.exec('underline'));
-    btn('<s>S</s>', 'Strikethrough', () => this.exec('strikeThrough'));
+    this.fbtn = {
+      bold: btn('<b>B</b>', 'Bold (Ctrl+B)', () => this.exec('bold')), italic: btn('<i>I</i>', 'Italic (Ctrl+I)', () => this.exec('italic')),
+      underline: btn('<u>U</u>', 'Underline (Ctrl+U)', () => this.exec('underline')), strikeThrough: btn('<s>S</s>', 'Strikethrough', () => this.exec('strikeThrough'))
+    };
+    this.fpaint = btn('🖌', 'Format painter: select formatted text, click this, then select other text or click another topic (Shift+click keeps it on, Esc cancels)', e => this.togglePainter(e && e.shiftKey), 'fpaint');
     f.append($('span', 'fsep'));
     const pal = ['#111827', '#6b7280', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#db2777', '#ffffff'];
     const hlp = ['#fef08a', '#fde68a', '#fdba74', '#fca5a5', '#f9a8d4', '#d8b4fe', '#a5b4fc', '#93c5fd', '#99f6e4', '#bbf7d0', '#d9f99d', '#e5e7eb'];
@@ -705,8 +714,8 @@ class MindMap {
     this.popBtn(f, '<span class="fh">ab</span>', 'Highlight', hlp, c => c ? this.exec('hiliteColor', c) : this.exec('hiliteColor', 'transparent'), 'hil', true);
     this.popSizes(f);
     f.append($('span', 'fsep'));
-    btn('x<sup>2</sup>', 'Superscript', () => this.exec('superscript'));
-    btn('x<sub>2</sub>', 'Subscript', () => this.exec('subscript'));
+    this.fbtn.superscript = btn('x<sup>2</sup>', 'Superscript', () => this.exec('superscript'));
+    this.fbtn.subscript = btn('x<sub>2</sub>', 'Subscript', () => this.exec('subscript'));
     btn('🔗', 'Insert link', () => this.execLink());
     btn('<span style="text-decoration:line-through wavy">T</span>', 'Clear formatting', () => this.exec('removeFormat'));
   }
@@ -721,8 +730,11 @@ class MindMap {
     cu.onmousedown = () => { const s = getSelection(); saved = s.rangeCount ? s.getRangeAt(0).cloneRange() : null; };
     cu.oninput = () => { const t = this.editing && this.editing.t; if (!t) return; t.focus(); if (saved) { const s = getSelection(); s.removeAllRanges(); s.addRange(saved); } fn(cu.value); };
     pop.append(cu);
-    b.onclick = () => { const open = pop.hidden; this.closePops(); pop.hidden = !open; };
-    wrap.append(b, pop); f.append(wrap);
+    const caret = $('button', 'fb fcaret', '▾'); caret.type = 'button'; caret.title = 'More colours'; caret.onmousedown = e => e.preventDefault();
+    caret.onclick = () => { const open = pop.hidden; this.closePops(); pop.hidden = !open; };
+    b.onclick = () => { this.closePops(); if (key === 'fore') this.exec('foreColor', this.memOf().fore || '#dc2626'); else if (key === 'hil') this.exec('hiliteColor', this.memOf().hil || '#fef08a'); };   // one click re-applies the colour last used in this topic
+    this[key + 'Btn'] = b;
+    wrap.append(b, caret, pop); f.append(wrap);
   }
   popSizes(f) {
     const wrap = $('span', 'fwrap'), b = $('button', 'fb', '<span style="font-size:11px">A</span><span style="font-size:15px">A</span>'); b.type = 'button'; b.title = 'Font size'; b.onmousedown = e => e.preventDefault();
@@ -738,7 +750,62 @@ class MindMap {
       document.execCommand('styleWithCSS', false, false); document.execCommand('fontSize', false, '7');
       t.querySelectorAll('font[size="7"]').forEach(f => { const s = document.createElement('span'); s.style.fontSize = val + 'px'; while (f.firstChild) s.append(f.firstChild); f.replaceWith(s); });
     } else { document.execCommand('styleWithCSS', false, true); document.execCommand(cmd, false, val); }
-    this.relayout(); this.posFmt();
+    this.remember(cmd, val); this.relayout(); this.posFmt(); this.syncFmt();
+  }
+  /* per-topic memory of the colours / size last used, kept on this device */
+  memOf(id) { id = id || (this.editing && this.editing.id); if (!this.fmtMem) { try { this.fmtMem = JSON.parse(localStorage.getItem('mm-nodefmt') || '{}'); } catch (e) { this.fmtMem = {}; } } return this.fmtMem[id] || this.fmtMem._last || {}; }
+  remember(cmd, val) {
+    const ed = this.editing; if (!ed || !val) return; const key = { foreColor: 'fore', hiliteColor: 'hil', fontSize: 'size' }[cmd]; if (!key || val === 'transparent') return;
+    this.memOf(); const mem = this.fmtMem[ed.id] = Object.assign({}, this.fmtMem[ed.id], { [key]: val, t: Date.now() }); this.fmtMem._last = Object.assign({}, this.fmtMem._last, { [key]: val });
+    const ks = Object.keys(this.fmtMem).filter(k => k !== '_last'); if (ks.length > 400) ks.sort((a, b) => (this.fmtMem[a].t || 0) - (this.fmtMem[b].t || 0)).slice(0, ks.length - 400).forEach(k => delete this.fmtMem[k]);
+    try { localStorage.setItem('mm-nodefmt', JSON.stringify(this.fmtMem)); } catch (e) {}
+  }
+  /* formatting at the caret / selection */
+  readFmt() {
+    const t = this.editing && this.editing.t; if (!t) return null; const q = c => { try { return document.queryCommandState(c); } catch (e) { return false; } }, v = c => { try { return document.queryCommandValue(c); } catch (e) { return ''; } };
+    const hex = s => { const x = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(s || ''); if (!x || (x[4] !== undefined && +x[4] === 0)) return null; return '#' + [x[1], x[2], x[3]].map(n => (+n).toString(16).padStart(2, '0')).join(''); };
+    const s = getSelection(); let el = s.anchorNode && (s.anchorNode.nodeType === 3 ? s.anchorNode.parentElement : s.anchorNode), size = null, fore = null, hil = null;
+    for (let x = el; x && x !== t && t.contains(x); x = x.parentElement) {   // only colours / sizes set explicitly on the text, not the topic's own style
+      if (x.style) { if (!size && x.style.fontSize) size = parseInt(x.style.fontSize, 10) || null; if (!fore && x.style.color) fore = hex(x.style.color); if (!hil && x.style.backgroundColor) hil = hex(x.style.backgroundColor); }
+    }
+    return { bold: q('bold'), italic: q('italic'), underline: q('underline'), strikeThrough: q('strikeThrough'), superscript: q('superscript'), subscript: q('subscript'), fore, hil, size };
+  }
+  syncFmt() {
+    if (!this.fbtn || !this.editing) return; const st = this.readFmt(); if (!st) return; const mem = this.memOf();
+    Object.keys(this.fbtn).forEach(k => this.fbtn[k].classList.toggle('on', !!st[k]));
+    const fa = this.fmt.querySelector('.fa'), fh = this.fmt.querySelector('.fh');
+    if (fa) fa.style.borderBottomColor = st.fore || mem.fore || '#f87171'; if (fh) fh.style.background = st.hil || mem.hil || '#fde047';
+    if (this.foreBtn) this.foreBtn.title = 'Text colour: click to apply ' + (mem.fore || 'red') + ', ▾ for more'; if (this.hilBtn) this.hilBtn.title = 'Highlight: click to apply ' + (mem.hil || 'yellow') + ', ▾ for more';
+  }
+  /* format painter */
+  togglePainter(sticky) {
+    if (this.painter) return this.cancelPainter(); const st = this.readFmt(); if (!st) return;
+    const s = getSelection(); this.painter = { mode: 'text', f: st, sticky: !!sticky, src: s.rangeCount ? s.getRangeAt(0).cloneRange() : null };
+    this.vp.classList.add('painting'); this.fpaint && this.fpaint.classList.add('on');
+  }
+  startTopicPainter(sticky) {   // copy the whole-topic text style of the selected topic
+    const n = this.get(this.primary); if (!n) return; const s = n.style || {};
+    this.painter = { mode: 'topic', sticky: !!sticky, patch: Object.fromEntries(['bold', 'italic', 'u', 'strike', 'size', 'color', 'hl'].map(k => [k, s[k] == null ? null : s[k]])) };
+    this.vp.classList.add('painting');
+  }
+  cancelPainter() { if (!this.painter) return; this.painter = null; this.vp.classList.remove('painting'); this.fpaint && this.fpaint.classList.remove('on'); }
+  applyFmt(f) {   // selection inside the open editor -> exactly the copied format
+    const t = this.editing.t; document.execCommand('removeFormat');
+    ['bold', 'italic', 'underline', 'strikeThrough', 'superscript', 'subscript'].forEach(c => { if (f[c] && !document.queryCommandState(c)) document.execCommand(c); });
+    if (f.fore) this.exec('foreColor', f.fore); if (f.hil) this.exec('hiliteColor', f.hil); if (f.size) this.exec('fontSize', f.size);
+    t.focus();
+  }
+  painterUp(e) {
+    const p = this.painter; if (!p || p.mode !== 'text' || !this.editing || this.fmt.contains(e.target)) return;
+    const s = getSelection(); if (!s.rangeCount || s.isCollapsed || !this.editing.t.contains(s.anchorNode)) return;
+    const r = s.getRangeAt(0); if (p.src && r.compareBoundaryPoints(Range.START_TO_START, p.src) === 0 && r.compareBoundaryPoints(Range.END_TO_END, p.src) === 0) return;   // still the source selection
+    this.applyFmt(p.f); if (!p.sticky) this.cancelPainter(); else { const s2 = getSelection(); p.src = s2.rangeCount ? s2.getRangeAt(0).cloneRange() : null; }
+  }
+  paintTo(id) {
+    const p = this.painter; if (!p) return;
+    if (p.mode === 'topic') this.setStyle(p.patch, [id]);
+    else { this.startEdit(id, false); const t = this.editing.t, r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); this.applyFmt(p.f); this.endEdit(true); this.select(id); }
+    if (!p.sticky) this.cancelPainter();
   }
   execLink() {
     const ed = this.editing; if (!ed) return; const t = ed.t, s = getSelection();

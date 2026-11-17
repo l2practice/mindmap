@@ -655,6 +655,7 @@ function initInspector() {
   $$('.tabs button[data-tab]').forEach(b => b.onclick = () => { $$('.tabs button[data-tab]').forEach(x => x.classList.toggle('on', x === b)); $('#tabNode').hidden = b.dataset.tab !== 'node'; $('#tabDoc').hidden = b.dataset.tab !== 'doc'; });
   const fs = $('#fSize'); fs.innerHTML = '<option value="">Auto</option>' + [10, 12, 13, 14, 16, 18, 20, 24, 28, 32, 40, 48, 64].map(n => `<option value="${n}">${n}px</option>`).join('');
   fs.onchange = () => mm().setStyle({ size: fs.value ? +fs.value : null });
+  $('#fPaint').onclick = e => { if (mm().painter) mm().cancelPainter(); else mm().startTopicPainter(e.shiftKey); };
   $$('[data-st]').forEach(b => b.onclick = () => mm().toggleStyle(b.dataset.st));
   $('#fColor').onchange = e => mm().setStyle({ color: e.target.value }); $('#fHl').onchange = e => mm().setStyle({ hl: e.target.value });
   $('#fHlX').onclick = () => mm().setStyle({ hl: null }); $('#fFill').onchange = e => mm().setStyle({ fill: e.target.value }); $('#fLine').onchange = e => mm().setStyle({ line: e.target.value });

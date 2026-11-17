@@ -486,3 +486,9 @@ input[type=password]:focus{border-color:var(--accent2);box-shadow:0 0 0 3px var(
 .node.vt .addb.ac{top:auto;bottom:-34px;right:auto;left:50%;margin:0 0 0 -11px}
 .node.vt:has(.fold) .addb.ac{bottom:-58px}
 .node.vt .addb.as{bottom:auto;left:auto;right:-34px;top:50%;margin:-11px 0 0 0}
+
+/* toolbar: active states, split colour buttons, format painter */
+.mm-fmt .fb.on{background:#5b47e0}
+.mm-fmt .fcaret{min-width:14px;padding:0 2px;font-size:10px;margin-left:-2px}
+.mm-fmt .fwrap .fpop{top:36px}
+.mm-viewport.painting,.mm-viewport.painting .node,.mm-viewport.painting .node .t{cursor:copy!important}
