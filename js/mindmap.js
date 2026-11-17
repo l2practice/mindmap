@@ -307,6 +307,10 @@ class MindMap {
       const f = $('button', 'fold' + (n.collapsed ? ' on' : '')); f.tabIndex = -1; f.dataset.fold = n.id;
       f.textContent = n.collapsed ? n.children.length : '−'; f.style.borderColor = bc; f.style.color = bc; el.append(f);
     }
+    if (!this.o.static && !this.readOnly) {
+      const mk = (cls, tip) => { const b = $('button', 'addb ' + cls, '+'); b.tabIndex = -1; b.dataset.add = cls; b.title = tip; b.style.background = bc; el.append(b); };
+      mk('ac', 'Add subtopic'); if (n.id !== this.doc.root.id) mk('as', 'Add sibling topic');
+    }
     const r = resolveStyle(n, d, bc, th); this.sty.set(n.id, r); applyStyle(el, r);
     return el;
   }
@@ -499,6 +503,8 @@ class MindMap {
       this.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, k: this.view.k, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 }; return;
     }
     const fold = e.target.closest('.fold');
+    const addb = e.target.closest('.addb');
+    if (addb && !this.readOnly) { e.preventDefault(); e.stopPropagation(); const id = addb.closest('.node').dataset.id; this.select(id); addb.dataset.add === 'ac' ? this.addChild(id) : this.addSibling(id); return; }
     if (fold && !this.readOnly) { this.toggleCollapse([fold.dataset.fold]); e.preventDefault(); return; }
     if (this.readOnly) { this.p = { id: e.pointerId, sx: e.clientX, sy: e.clientY, vx: this.view.x, vy: this.view.y, nodeId: null, mode: null, mod: false }; return; }
     const nel = e.target.closest('.node'), id = nel ? nel.dataset.id : null, mod = e.shiftKey || e.ctrlKey || e.metaKey;
@@ -646,7 +652,8 @@ class MindMap {
     this.editing = { id, old: { text: info.n.text, html: info.n.html }, t };
     t.contentEditable = 'true'; t.spellcheck = false; el.classList.add('editing'); t.classList.remove('hl'); t.style.background = '';
     t.focus();
-    const r = document.createRange(); r.selectNodeContents(t); if (!all) r.collapse(false);
+    const fresh = !info.n.html && (!info.n.text || /^(Subtopic|Intermediate topic|Central topic)$/.test(info.n.text));   // placeholder text is selected so typing replaces it; real text just gets the caret
+    const r = document.createRange(); r.selectNodeContents(t); if (!(all && fresh)) r.collapse(false);
     const s = getSelection(); s.removeAllRanges(); s.addRange(r);
     t.oninput = () => { this.relayout(); this.posFmt(); };
     t.onkeydown = e => {
@@ -832,7 +839,8 @@ class MindMap {
     if (val == null || val === '' || (Array.isArray(val) && !val.length)) delete n[field]; else n[field] = val;
     if (commit) this.commit();
   }
-  setLayout(l) { this.doc.layout = l; this.commit(); requestAnimationFrame(() => this.fit()); }
+  setLayout(l) { this.doc.layout = l; if (l === 'map') this.doc.root.children.forEach(k => { delete k.side; });   // choosing “Both sides” spreads the main branches over both sides again
+    this.commit(); requestAnimationFrame(() => this.fit()); }
   setTheme(t) { this.doc.theme = t; this.commit(); }
   setLineStyle(s) { this.doc.lineStyle = s; this.commit(); }
   setTitle(t) { this.doc.title = t; this.changed(); }
@@ -898,7 +906,7 @@ class MindMap {
     const clone = this.stage.cloneNode(true);
     clone.style.transform = `translate(${pad + 20 - b.x}px,${pad - b.y}px)`;
     clone.querySelectorAll('.sel,.pri,.hit,.editing,.dragging').forEach(e => e.classList.remove('sel', 'pri', 'hit', 'editing', 'dragging'));
-    clone.querySelectorAll('.fold:not(.on)').forEach(e => e.remove());
+    clone.querySelectorAll('.fold:not(.on),.addb').forEach(e => e.remove());
     clone.querySelectorAll('[contenteditable]').forEach(e => e.removeAttribute('contenteditable'));
     const wrap = document.createElement('div');
     wrap.style.cssText = `position:relative;width:${w}px;height:${h}px;background:${this.bgColor()};${patternStyle(this.doc.pattern, this.doc.bg ? contrast(this.bgColor()) === '#ffffff' : this.theme().dark)}overflow:hidden;font-family:'Google Sans','Google Sans Flex',system-ui,-apple-system,'Segoe UI',Roboto,Arial,sans-serif`;

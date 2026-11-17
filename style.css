@@ -473,3 +473,16 @@ input[type=password]:focus{border-color:var(--accent2);box-shadow:0 0 0 3px var(
 .avatar{object-fit:cover}
 
 #mSort{padding:7px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--text);font:inherit;font-size:13px}
+
+/* quick-add buttons (XMind style): + on the outer side adds a subtopic, + underneath adds a sibling */
+.node .addb{position:absolute;width:22px;height:22px;padding:0;border:0;border-radius:50%;color:#fff;font-size:17px;line-height:21px;font-weight:600;text-align:center;cursor:pointer;opacity:0;pointer-events:none;box-shadow:0 1px 4px rgba(0,0,0,.25);transition:opacity .12s,transform .12s;z-index:5}
+.node.pri .addb,.node:hover .addb{opacity:1;pointer-events:auto}.node.editing .addb{opacity:0;pointer-events:none}
+.node .addb:hover{transform:scale(1.15)}
+.node .addb.ac{top:50%;margin-top:-11px;right:-34px}
+.node.dl .addb.ac{right:auto;left:-34px}
+.node .fold~.addb.ac,.node:has(.fold) .addb.ac{right:-58px}
+.node.dl:has(.fold) .addb.ac{right:auto;left:-58px}
+.node .addb.as{left:50%;margin-left:-11px;bottom:-30px}
+.node.vt .addb.ac{top:auto;bottom:-34px;right:auto;left:50%;margin:0 0 0 -11px}
+.node.vt:has(.fold) .addb.ac{bottom:-58px}
+.node.vt .addb.as{bottom:auto;left:auto;right:-34px;top:50%;margin:-11px 0 0 0}
